@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Knights Territory</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="game-shell" aria-label="Knights Territory board">
+        <div class="board-turn white-turn-label" id="whiteTurnLabel">White Turn</div>
+        <div class="board-turn black-turn-label" id="blackTurnLabel">Black Turn</div>
+        <canvas id="board" width="980" height="820"></canvas>
+      </section>
+
+      <aside class="panel" aria-label="Game controls">
+        <div class="brand">
+          <div>
+            <p class="eyebrow">Knights Territory</p>
+            <h1 id="turnTitle">White Turn</h1>
+          </div>
+          <div class="turn-chip" id="turnChip">W</div>
+        </div>
+
+        <div class="score-row">
+          <div class="score white">
+            <span>White</span>
+            <strong id="whiteScore">0</strong>
+          </div>
+          <div class="score black">
+            <span>Black</span>
+            <strong id="blackScore">0</strong>
+          </div>
+        </div>
+
+        <div class="reserve-grid">
+          <div>
+            <span>White walls</span>
+            <strong id="whiteWalls">40</strong>
+          </div>
+          <div>
+            <span>Black walls</span>
+            <strong id="blackWalls">40</strong>
+          </div>
+          <div>
+            <span>Castle tiles</span>
+            <strong id="castleReserve">6</strong>
+          </div>
+          <div>
+            <span>Winner</span>
+            <strong id="winner">-</strong>
+          </div>
+        </div>
+
+        <div class="log" id="log" aria-live="polite"></div>
+
+        <div class="footer-actions">
+          <button id="undoBtn" class="secondary" title="Undo last action">↶ Undo</button>
+          <button id="resetBtn" class="secondary" title="New game">New Game</button>
+        </div>
+      </aside>
+    </main>
+
+    <div class="win-modal" id="winModal" hidden>
+      <div class="win-card" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+        <p class="eyebrow">Game Over</p>
+        <h2 id="winTitle">White Wins</h2>
+        <button id="winResetBtn" class="secondary" title="Start a new game">New Game</button>
+      </div>
+    </div>
+
+    <script src="game.js"></script>
+  </body>
+</html>
