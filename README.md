@@ -1,4 +1,4 @@
-# Knights Territory
+# Stronghold
 
 A browser-playable prototype of Knights Territory, a two-player abstract strategy game played on a hex board.
 
