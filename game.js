@@ -48,6 +48,7 @@ let layout = { scale: 1, ox: 0, oy: 0, width: 0, height: 0 };
 let state;
 let selectedKnight = null;
 let hover = null;
+let pendingTouchEdge = null;
 let history = [];
 let assetsReady = false;
 let resizeFrame = null;
@@ -407,6 +408,8 @@ function hexDistance(a, b) {
 function finishTurn() {
   const actor = currentPlayer();
   selectedKnight = null;
+  pendingTouchEdge = null;
+  hover = null;
   resolveCaptures(actor);
   if (score(actor) >= WIN_CASTLE_COUNT) {
     state.winner = actor;
@@ -794,11 +797,74 @@ function hitTest(event) {
   return null;
 }
 
+function edgeAction(key) {
+  if (state.walls[key] && canDestroyWall(key, currentPlayer())) return "break";
+  if (!state.walls[key] && canBuildWall(key, currentPlayer())) return "build";
+  return null;
+}
+
 function handleBoardClick(event) {
   if (state.winner) return;
   const hit = hitTest(event);
   if (!hit) return;
   const owner = currentPlayer();
+
+  if (hit.kind === "vertex") {
+    pendingTouchEdge = null;
+    hover = null;
+    const knight = knightAt(hit.key);
+    if (knight && knight.owner === owner) {
+      selectedKnight = selectedKnight === knight.id ? null : knight.id;
+      draw();
+      return;
+    }
+    moveKnight(hit.key);
+    return;
+  }
+
+  if (hit.kind === "edge") {
+    pendingTouchEdge = null;
+    if (state.walls[hit.key]) destroyWall(hit.key);
+    else buildWall(hit.key);
+    return;
+  }
+
+  pendingTouchEdge = null;
+  if (hit.kind === "cell" && canBuildCastle(hit.key, owner)) buildCastle(hit.key);
+}
+
+function handleBoardPointerUp(event) {
+  if (event.pointerType !== "touch") {
+    handleBoardClick(event);
+    return;
+  }
+
+  if (state.winner) return;
+  const hit = hitTest(event);
+  const owner = currentPlayer();
+
+  if (hit?.kind === "edge") {
+    const action = edgeAction(hit.key);
+    if (action && pendingTouchEdge?.key === hit.key && pendingTouchEdge.action === action) {
+      pendingTouchEdge = null;
+      hover = null;
+      if (action === "break") destroyWall(hit.key);
+      else buildWall(hit.key);
+      return;
+    }
+    pendingTouchEdge = { key: hit.key, action };
+    hover = hit;
+    draw();
+    return;
+  }
+
+  pendingTouchEdge = null;
+  hover = null;
+
+  if (!hit) {
+    draw();
+    return;
+  }
 
   if (hit.kind === "vertex") {
     const knight = knightAt(hit.key);
@@ -811,13 +877,8 @@ function handleBoardClick(event) {
     return;
   }
 
-  if (hit.kind === "edge") {
-    if (state.walls[hit.key]) destroyWall(hit.key);
-    else buildWall(hit.key);
-    return;
-  }
-
   if (hit.kind === "cell" && canBuildCastle(hit.key, owner)) buildCastle(hit.key);
+  else draw();
 }
 
 function updateUi() {
@@ -842,6 +903,7 @@ function resetGame() {
   history = [];
   selectedKnight = null;
   hover = null;
+  pendingTouchEdge = null;
   updateUi();
   resizeCanvas();
 }
@@ -851,17 +913,22 @@ els.undo.addEventListener("click", () => {
   if (!previous) return;
   state = previous;
   selectedKnight = null;
+  pendingTouchEdge = null;
+  hover = null;
   updateUi();
   draw();
 });
 els.reset.addEventListener("click", resetGame);
 els.winReset.addEventListener("click", resetGame);
-canvas.addEventListener("click", handleBoardClick);
-canvas.addEventListener("mousemove", (event) => {
+canvas.addEventListener("pointerup", handleBoardPointerUp);
+canvas.addEventListener("pointermove", (event) => {
+  if (event.pointerType === "touch") return;
+  pendingTouchEdge = null;
   hover = hitTest(event);
   draw();
 });
-canvas.addEventListener("mouseleave", () => {
+canvas.addEventListener("pointerleave", (event) => {
+  if (event.pointerType === "touch") return;
   hover = null;
   draw();
 });
