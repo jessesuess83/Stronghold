@@ -554,7 +554,7 @@ function drawCastleBacking(x, y, size, owner) {
 
 function drawCastle(cell, castle) {
   const center = toScreen(cell);
-  const size = castle.capital ? 60 : 50;
+  const size = castle.capital ? 70 : 60;
   const castleImage = assetImages[castle.owner === "W" ? "castleB" : "castleW"];
   if (assetsReady && castleImage?.complete) {
     drawCastleBacking(center.x, center.y, size + 5, castle.owner);
@@ -608,7 +608,7 @@ function drawKnight(knight) {
   const selected = selectedKnight === knight.id;
   const knightImage = assetImages[knight.owner === "W" ? "knightB" : "knightW"];
   if (assetsReady && knightImage?.complete) {
-    drawKnightBacking(point.x, point.y, selected ? 30 : 26, knight.owner);
+    drawKnightBacking(point.x, point.y, selected ? 35 : 31, knight.owner);
     if (selected) {
       ctx.beginPath();
       for (let i = 0; i < 6; i += 1) {
@@ -623,7 +623,7 @@ function drawKnight(knight) {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-    drawImageIcon(knightImage, point.x, point.y, selected ? 29 : 25, "none");
+    drawImageIcon(knightImage, point.x, point.y, selected ? 34 : 30, "none");
   } else {
     ctx.beginPath();
     ctx.arc(point.x, point.y, selected ? 16 : 13, 0, Math.PI * 2);
