@@ -554,7 +554,7 @@ function drawCastleBacking(x, y, size, owner) {
 
 function drawCastle(cell, castle) {
   const center = toScreen(cell);
-  const size = castle.capital ? 46 : 40;
+  const size = castle.capital ? 60 : 50;
   const castleImage = assetImages[castle.owner === "W" ? "castleB" : "castleW"];
   if (assetsReady && castleImage?.complete) {
     drawCastleBacking(center.x, center.y, size + 5, castle.owner);
