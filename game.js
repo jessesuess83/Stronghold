@@ -471,7 +471,7 @@ function drawWall(key, owner, preview = false) {
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
-  ctx.strokeStyle = owner === "W" ? "#ffffff" : "#1f252c";
+  ctx.strokeStyle = owner === "W" ? "#fffaf0" : "#1f252c";
   ctx.lineWidth = preview ? 7 : 9;
   ctx.lineCap = "round";
   ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
