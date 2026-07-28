@@ -608,7 +608,7 @@ function drawKnight(knight) {
   const selected = selectedKnight === knight.id;
   const knightImage = assetImages[knight.owner === "W" ? "knightB" : "knightW"];
   if (assetsReady && knightImage?.complete) {
-    drawKnightBacking(point.x, point.y, selected ? 24 : 20, knight.owner);
+    drawKnightBacking(point.x, point.y, selected ? 28 : 24, knight.owner);
     if (selected) {
       ctx.beginPath();
       for (let i = 0; i < 6; i += 1) {
@@ -623,7 +623,7 @@ function drawKnight(knight) {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-    drawImageIcon(knightImage, point.x, point.y, selected ? 21 : 17, "none");
+    drawImageIcon(knightImage, point.x, point.y, selected ? 26 : 22, "none");
   } else {
     ctx.beginPath();
     ctx.arc(point.x, point.y, selected ? 16 : 13, 0, Math.PI * 2);
