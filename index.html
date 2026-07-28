@@ -3,21 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Knights Territory</title>
+    <title>Stronghold</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="app">
-      <section class="game-shell" aria-label="Knights Territory board">
-        <div class="board-turn white-turn-label" id="whiteTurnLabel">White Turn</div>
-        <div class="board-turn black-turn-label" id="blackTurnLabel">Black Turn</div>
-        <canvas id="board" width="980" height="820"></canvas>
+      <section class="board-zone" aria-label="Stronghold board area">
+        <header class="board-header">
+          <h1 class="game-title">Stronghold</h1>
+        </header>
+        <div class="game-shell" aria-label="Stronghold board">
+          <div class="board-turn white-turn-label" id="whiteTurnLabel">White Turn</div>
+          <div class="board-turn black-turn-label" id="blackTurnLabel">Black Turn</div>
+          <canvas id="board" width="980" height="820"></canvas>
+        </div>
       </section>
 
       <aside class="panel" aria-label="Game controls">
         <div class="brand">
           <div>
-            <p class="eyebrow">Knights Territory</p>
+            <p class="eyebrow">Stronghold</p>
             <h1 id="turnTitle">White Turn</h1>
           </div>
           <div class="turn-chip" id="turnChip">W</div>

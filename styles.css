@@ -43,11 +43,41 @@ button {
   padding: 18px;
 }
 
+.board-zone {
+  display: flex;
+  min-width: 1150px;
+  min-height: calc(100vh - 36px);
+  flex-direction: column;
+  gap: 12px;
+}
+
+.board-header {
+  display: grid;
+  min-height: 58px;
+  place-items: center;
+}
+
+.game-title {
+  margin: 0;
+  color: #20242a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 3.25rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 0.95;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow:
+    0 1px 0 rgba(255, 250, 240, 0.86),
+    0 10px 28px rgba(39, 45, 53, 0.18);
+}
+
 .game-shell {
   position: relative;
-  height: max(806px, calc(100vh - 36px));
+  flex: 1;
+  height: max(736px, calc(100vh - 106px));
   min-width: 1150px;
-  min-height: 806px;
+  min-height: 736px;
   border: 1px solid rgba(32, 36, 42, 0.16);
   border-radius: 8px;
   background:
@@ -275,10 +305,18 @@ h1 {
     grid-template-columns: minmax(900px, 1fr);
   }
 
-  .game-shell {
-    height: 806px;
+  .board-zone {
     min-width: 900px;
-    min-height: 806px;
+  }
+
+  .game-title {
+    font-size: 2.45rem;
+  }
+
+  .game-shell {
+    height: 736px;
+    min-width: 900px;
+    min-height: 736px;
   }
 
   .panel {
