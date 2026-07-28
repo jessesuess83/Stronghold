@@ -472,7 +472,7 @@ function drawWall(key, owner, preview = false) {
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.strokeStyle = owner === "W" ? "#fffaf0" : "#1f252c";
-  ctx.lineWidth = preview ? 7 : 9;
+  ctx.lineWidth = preview ? 5 : 7;
   ctx.lineCap = "round";
   ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
   ctx.shadowBlur = preview ? 0 : 5;
@@ -608,7 +608,7 @@ function drawKnight(knight) {
   const selected = selectedKnight === knight.id;
   const knightImage = assetImages[knight.owner === "W" ? "knightB" : "knightW"];
   if (assetsReady && knightImage?.complete) {
-    drawKnightBacking(point.x, point.y, selected ? 28 : 24, knight.owner);
+    drawKnightBacking(point.x, point.y, selected ? 30 : 26, knight.owner);
     if (selected) {
       ctx.beginPath();
       for (let i = 0; i < 6; i += 1) {
@@ -623,7 +623,7 @@ function drawKnight(knight) {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-    drawImageIcon(knightImage, point.x, point.y, selected ? 26 : 22, "none");
+    drawImageIcon(knightImage, point.x, point.y, selected ? 29 : 25, "none");
   } else {
     ctx.beginPath();
     ctx.arc(point.x, point.y, selected ? 16 : 13, 0, Math.PI * 2);
