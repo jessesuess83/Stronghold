@@ -452,7 +452,7 @@ function fromScreen(x, y) {
   return { x: (x - layout.ox) / layout.scale, y: (y - layout.oy) / layout.scale };
 }
 
-function drawHex(cell, fill, stroke = "#7e8790") {
+function drawHex(cell, fill, stroke = "#d8dde2") {
   const points = cell.vertices.map((key) => toScreen(vertices.get(key)));
   ctx.beginPath();
   points.forEach((point, i) => (i ? ctx.lineTo(point.x, point.y) : ctx.moveTo(point.x, point.y)));
@@ -657,10 +657,10 @@ function draw() {
   layout.width = rect.width;
   layout.height = rect.height;
   ctx.clearRect(0, 0, layout.width, layout.height);
-  ctx.fillStyle = "#eef0e7";
+  ctx.fillStyle = "#e5e8eb";
   ctx.fillRect(0, 0, layout.width, layout.height);
 
-  for (const cell of cells) drawHex(cell, "#efe7d7");
+  for (const cell of cells) drawHex(cell, "#b9c0c6");
 
   for (const [key, owner] of Object.entries(state.walls)) drawWall(key, owner);
 
