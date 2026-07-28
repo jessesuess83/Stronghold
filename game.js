@@ -966,7 +966,6 @@ window.addEventListener("resize", () => {
 });
 
 buildGeometry();
-resetGame();
 
 Promise.all(
   Object.entries(ASSET_PATHS).map(
@@ -981,5 +980,5 @@ Promise.all(
   ),
 ).then(() => {
   assetsReady = true;
-  draw();
+  resetGame();
 });
