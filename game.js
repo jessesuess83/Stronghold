@@ -554,7 +554,7 @@ function drawCastleBacking(x, y, size, owner) {
 
 function drawCastle(cell, castle) {
   const center = toScreen(cell);
-  const size = castle.capital ? 34 : 30;
+  const size = castle.capital ? 46 : 40;
   const castleImage = assetImages[castle.owner === "W" ? "castleB" : "castleW"];
   if (assetsReady && castleImage?.complete) {
     drawCastleBacking(center.x, center.y, size + 5, castle.owner);
@@ -584,15 +584,15 @@ function drawCastle(cell, castle) {
   ctx.strokeStyle = castle.capital ? "#d49a24" : "#738395";
   ctx.lineWidth = castle.capital ? 4 : 3;
   ctx.beginPath();
-  ctx.moveTo(-15, 12);
-  ctx.lineTo(-15, -6);
-  ctx.lineTo(-8, -6);
-  ctx.lineTo(-8, -14);
-  ctx.lineTo(0, -8);
-  ctx.lineTo(8, -14);
-  ctx.lineTo(8, -6);
-  ctx.lineTo(15, -6);
-  ctx.lineTo(15, 12);
+  ctx.moveTo(-20, 16);
+  ctx.lineTo(-20, -8);
+  ctx.lineTo(-11, -8);
+  ctx.lineTo(-11, -19);
+  ctx.lineTo(0, -11);
+  ctx.lineTo(11, -19);
+  ctx.lineTo(11, -8);
+  ctx.lineTo(20, -8);
+  ctx.lineTo(20, 16);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
