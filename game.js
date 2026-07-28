@@ -31,14 +31,17 @@ const els = {
   blackWalls: document.getElementById("blackWalls"),
   castleReserve: document.getElementById("castleReserve"),
   winner: document.getElementById("winner"),
-  whiteTurnLabel: document.getElementById("whiteTurnLabel"),
-  blackTurnLabel: document.getElementById("blackTurnLabel"),
+  whiteHud: document.getElementById("whiteHud"),
+  blackHud: document.getElementById("blackHud"),
   winModal: document.getElementById("winModal"),
   winTitle: document.getElementById("winTitle"),
+  confirmResetModal: document.getElementById("confirmResetModal"),
   log: document.getElementById("log"),
   undo: document.getElementById("undoBtn"),
   reset: document.getElementById("resetBtn"),
   winReset: document.getElementById("winResetBtn"),
+  cancelReset: document.getElementById("cancelResetBtn"),
+  confirmReset: document.getElementById("confirmResetBtn"),
 };
 
 let cells = [];
@@ -468,14 +471,25 @@ function drawWall(key, owner, preview = false) {
   const edge = edges.get(key);
   const a = toScreen(vertices.get(edge.a));
   const b = toScreen(vertices.get(edge.b));
+
+  if (preview) {
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = "rgba(212, 154, 36, 0.72)";
+    ctx.lineWidth = 13;
+    ctx.lineCap = "round";
+    ctx.stroke();
+  }
+
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.strokeStyle = owner === "W" ? "#fffaf0" : "#1f252c";
-  ctx.lineWidth = preview ? 5 : 7;
+  ctx.lineWidth = 7;
   ctx.lineCap = "round";
-  ctx.shadowColor = "rgba(0, 0, 0, 0.28)";
-  ctx.shadowBlur = preview ? 0 : 5;
+  ctx.shadowColor = preview ? "rgba(212, 154, 36, 0.35)" : "rgba(0, 0, 0, 0.28)";
+  ctx.shadowBlur = preview ? 8 : 5;
   ctx.stroke();
   ctx.shadowBlur = 0;
   if (owner === "B") {
@@ -885,14 +899,14 @@ function updateUi() {
   els.turnTitle.textContent = state.winner ? `${PLAYERS[state.winner].name} Wins` : `${PLAYERS[state.turn].name} Turn`;
   els.turnChip.textContent = state.winner || state.turn;
   els.turnChip.classList.toggle("black-turn", (state.winner || state.turn) === "B");
+  els.whiteHud.classList.toggle("active", !state.winner && state.turn === "W");
+  els.blackHud.classList.toggle("active", !state.winner && state.turn === "B");
   els.whiteScore.textContent = score("W");
   els.blackScore.textContent = score("B");
   els.whiteWalls.textContent = state.reserves.W;
   els.blackWalls.textContent = state.reserves.B;
   els.castleReserve.textContent = state.reserves.castles;
   els.winner.textContent = state.winner ? PLAYERS[state.winner].name : "-";
-  els.whiteTurnLabel.classList.toggle("active", !state.winner && state.turn === "W");
-  els.blackTurnLabel.classList.toggle("active", !state.winner && state.turn === "B");
   els.winTitle.textContent = state.winner ? `${PLAYERS[state.winner].name} Wins` : "";
   els.winModal.hidden = !state.winner;
   els.log.innerHTML = state.log.map((item) => `<p>${item}</p>`).join("");
@@ -918,8 +932,19 @@ els.undo.addEventListener("click", () => {
   updateUi();
   draw();
 });
-els.reset.addEventListener("click", resetGame);
-els.winReset.addEventListener("click", resetGame);
+els.reset.addEventListener("click", () => {
+  els.confirmResetModal.hidden = false;
+});
+els.cancelReset.addEventListener("click", () => {
+  els.confirmResetModal.hidden = true;
+});
+els.confirmReset.addEventListener("click", () => {
+  els.confirmResetModal.hidden = true;
+  resetGame();
+});
+els.winReset.addEventListener("click", () => {
+  els.winModal.hidden = true;
+});
 canvas.addEventListener("pointerup", handleBoardPointerUp);
 canvas.addEventListener("pointermove", (event) => {
   if (event.pointerType === "touch") return;
