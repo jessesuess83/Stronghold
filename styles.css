@@ -208,6 +208,18 @@ button {
   text-transform: uppercase;
 }
 
+.online-role.white-role {
+  border-color: rgba(218, 157, 36, 0.74);
+  background: #fffaf0;
+  color: #20242a;
+}
+
+.online-role.black-role {
+  border-color: rgba(255, 250, 240, 0.3);
+  background: #101215;
+  color: #fffaf0;
+}
+
 .online-role[hidden],
 .online-status[hidden],
 .compact[hidden] {

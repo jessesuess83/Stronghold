@@ -957,6 +957,8 @@ function updateOnlineStatus(message = null) {
 
   if (els.onlineRole) {
     els.onlineRole.hidden = !onlineGame.joined;
+    els.onlineRole.classList.toggle("white-role", onlineGame.player === "W");
+    els.onlineRole.classList.toggle("black-role", onlineGame.player === "B");
     if (onlineGame.joined) {
       els.onlineRole.textContent = onlineGame.player
         ? `You are ${onlineRoleName(onlineGame.player)}`
