@@ -563,6 +563,19 @@ function nearestCastleDistance(vertexKeyValue, owner, options = {}) {
   return best;
 }
 
+function nearestBuildSiteDistance(vertexKeyValue, owner) {
+  const point = vertices.get(vertexKeyValue);
+  const home = capitalCell(owner);
+  let best = Infinity;
+  for (const cell of cells) {
+    if (state.castles[cell.key] || !hasCastleSpacing(cell)) continue;
+    if (home && hexDistance(cell, home) <= 1) continue;
+    const dist = Math.hypot(point.x - cell.x, point.y - cell.y) / HEX_SIZE;
+    if (dist < best) best = dist;
+  }
+  return best;
+}
+
 function adjacentWallCounts(vertexKeyValue, owner) {
   const counts = { own: 0, enemy: 0, vulnerableEnemy: 0 };
   for (const key of vertices.get(vertexKeyValue)?.edges || []) {
@@ -587,10 +600,12 @@ function knightDevelopmentScore(owner) {
     const adjacent = adjacentWallCounts(knight.vertex, owner);
 
     value += Math.min(homeDistance, 4.5) * (castleReserveGone() ? 115 : 75);
-    if (Number.isFinite(enemyCastleDistance)) value += Math.max(0, 7 - enemyCastleDistance) * (castleReserveGone() ? 145 : 55);
+    const buildSiteDistance = nearestBuildSiteDistance(knight.vertex, owner);
+    if (Number.isFinite(enemyCastleDistance)) value += Math.max(0, 7 - enemyCastleDistance) * (castleReserveGone() ? 145 : 10);
+    if (Number.isFinite(buildSiteDistance) && !castleReserveGone()) value += Math.max(0, 7 - buildSiteDistance) * 135;
     if (Number.isFinite(ownCastleDistance)) value += Math.max(0, 4 - ownCastleDistance) * 55;
-    value += adjacent.vulnerableEnemy * (castleReserveGone() ? 720 : 260);
-    value += adjacent.enemy * (castleReserveGone() ? 220 : 90);
+    value += adjacent.vulnerableEnemy * (castleReserveGone() ? 720 : 70);
+    value += adjacent.enemy * (castleReserveGone() ? 220 : 30);
     value += adjacent.own * 120;
   }
   return value;
@@ -602,6 +617,8 @@ function moveAttackBonus(action, owner) {
   if (!knight) return 0;
   const fromEnemyDistance = nearestCastleDistance(knight.vertex, enemyOf(owner));
   const toEnemyDistance = nearestCastleDistance(action.to, enemyOf(owner));
+  const fromBuildSiteDistance = nearestBuildSiteDistance(knight.vertex, owner);
+  const toBuildSiteDistance = nearestBuildSiteDistance(action.to, owner);
   const fromHome = capitalCell(owner);
   const fromPoint = vertices.get(knight.vertex);
   const toPoint = vertices.get(action.to);
@@ -610,10 +627,11 @@ function moveAttackBonus(action, owner) {
     : 0;
   const adjacent = adjacentWallCounts(action.to, owner);
   let value = 0;
-  if (Number.isFinite(fromEnemyDistance) && Number.isFinite(toEnemyDistance)) value += (fromEnemyDistance - toEnemyDistance) * (castleReserveGone() ? 460 : 160);
-  value += Math.max(0, homeProgress) * (castleReserveGone() ? 170 : 105);
-  value += adjacent.vulnerableEnemy * (castleReserveGone() ? 1050 : 340);
-  value += adjacent.enemy * (castleReserveGone() ? 300 : 110);
+  if (Number.isFinite(fromEnemyDistance) && Number.isFinite(toEnemyDistance)) value += (fromEnemyDistance - toEnemyDistance) * (castleReserveGone() ? 460 : 35);
+  if (Number.isFinite(fromBuildSiteDistance) && Number.isFinite(toBuildSiteDistance) && !castleReserveGone()) value += (fromBuildSiteDistance - toBuildSiteDistance) * 520;
+  value += Math.max(0, homeProgress) * (castleReserveGone() ? 170 : 150);
+  value += adjacent.vulnerableEnemy * (castleReserveGone() ? 1050 : 110);
+  value += adjacent.enemy * (castleReserveGone() ? 300 : 35);
   value += adjacent.own * 120;
   return value;
 }
