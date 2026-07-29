@@ -49,12 +49,16 @@ const els = {
   undoButtons: document.querySelectorAll("[data-undo]"),
   reset: document.getElementById("resetBtn"),
   online: document.getElementById("onlineBtn"),
+  onlineColorModal: document.getElementById("onlineColorModal"),
+  onlineColorChoice: document.getElementById("onlineColorChoice"),
+  onlineColorButtons: document.querySelectorAll("[data-online-color]"),
   onlineRole: document.getElementById("onlineRole"),
   onlineStatus: document.getElementById("onlineStatus"),
   copyLink: document.getElementById("copyLinkBtn"),
   winReset: document.getElementById("winResetBtn"),
   cancelReset: document.getElementById("cancelResetBtn"),
   confirmReset: document.getElementById("confirmResetBtn"),
+  cancelOnlineColor: document.getElementById("cancelOnlineColorBtn"),
   howTo: document.getElementById("howToBtn"),
   closeHowTo: document.getElementById("closeHowToBtn"),
 };
@@ -74,6 +78,7 @@ let history = [];
 let assetsReady = false;
 let resizeFrame = null;
 let suppressOnlinePublish = false;
+let preferredOnlinePlayer = "W";
 let onlineGame = {
   socket: null,
   roomId: null,
@@ -206,6 +211,10 @@ function canActLocally() {
 function onlineRoleName(role) {
   if (role === "W" || role === "B") return PLAYERS[role].name;
   return "Spectator";
+}
+
+function updateOnlineColorChoice() {
+  if (els.onlineColorChoice) els.onlineColorChoice.hidden = onlineGame.joined;
 }
 
 function showOnlineTurnBlocked() {
@@ -944,6 +953,8 @@ function edgeAction(key) {
 }
 
 function updateOnlineStatus(message = null) {
+  updateOnlineColorChoice();
+
   if (els.onlineRole) {
     els.onlineRole.hidden = !onlineGame.joined;
     if (onlineGame.joined) {
@@ -1015,10 +1026,20 @@ function publishOnlineState() {
   onlineGame.socket.emit("submitState", { roomId: onlineGame.roomId, state: cloneState(state) });
 }
 
-async function createOnlineGame() {
+function openOnlineColorModal() {
+  if (onlineGame.joined) {
+    updateOnlineStatus();
+    return;
+  }
+  updateOnlineColorChoice();
+  if (els.onlineColorModal) els.onlineColorModal.hidden = false;
+}
+
+async function createOnlineGame(player = preferredOnlinePlayer) {
+  preferredOnlinePlayer = player === "B" ? "B" : "W";
   try {
     const socket = await connectOnlineSocket();
-    socket.emit("createGame", { state: cloneState(state) }, (response) => {
+    socket.emit("createGame", { state: cloneState(state), player: preferredOnlinePlayer }, (response) => {
       if (!response?.ok) {
         updateOnlineStatus(response?.error || "Could not create online game.");
         return;
@@ -1234,7 +1255,18 @@ function undoLastAction() {
 }
 
 els.undoButtons.forEach((button) => button.addEventListener("click", undoLastAction));
-els.online?.addEventListener("click", createOnlineGame);
+els.onlineColorButtons?.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (onlineGame.joined) return;
+    const selectedPlayer = button.dataset.onlineColor === "B" ? "B" : "W";
+    if (els.onlineColorModal) els.onlineColorModal.hidden = true;
+    createOnlineGame(selectedPlayer);
+  });
+});
+els.online?.addEventListener("click", openOnlineColorModal);
+els.cancelOnlineColor?.addEventListener("click", () => {
+  els.onlineColorModal.hidden = true;
+});
 els.copyLink?.addEventListener("click", async () => {
   if (!onlineGame.inviteUrl) return;
   try {

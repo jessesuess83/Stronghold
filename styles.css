@@ -146,6 +146,42 @@ button {
   gap: clamp(6px, 1vw, 10px);
 }
 
+
+.online-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+
+.online-color-choice {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.online-color-choice[hidden] {
+  display: none;
+}
+
+.color-choice {
+  min-height: 38px;
+  padding: 0 18px;
+  border: 1px solid rgba(32, 36, 42, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.84);
+  color: #20242a;
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-size: clamp(1rem, 1.1vw, 1.12rem);
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(32, 36, 42, 0.08);
+}
+
+.color-choice:hover {
+  border-color: rgba(32, 36, 42, 0.42);
+  background: rgba(255, 250, 240, 0.96);
+}
+
 .online-role,
 .online-status {
   width: fit-content;
@@ -166,7 +202,10 @@ button {
 
 .online-role {
   color: #20242a;
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-size: clamp(1.02rem, 1.35vw, 1.28rem);
   font-weight: 950;
+  text-transform: uppercase;
 }
 
 .online-role[hidden],
@@ -337,6 +376,7 @@ button {
 
 .win-modal,
 .confirm-modal,
+.online-color-modal,
 .how-to-modal {
   position: fixed;
   inset: 0;
@@ -349,6 +389,7 @@ button {
 
 .win-modal[hidden],
 .confirm-modal[hidden],
+.online-color-modal[hidden],
 .how-to-modal[hidden] {
   display: none;
 }
@@ -372,6 +413,17 @@ button {
 .confirm-actions {
   display: flex;
   gap: 10px;
+}
+
+.online-color-modal .dialog-card {
+  display: grid;
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  justify-items: center;
+  gap: 14px;
+}
+
+.online-color-modal .dialog-card h2 {
+  margin-bottom: 2px;
 }
 
 .danger {

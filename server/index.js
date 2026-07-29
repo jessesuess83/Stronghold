@@ -57,7 +57,7 @@ app.get("/", (_req, res) => {
 io.on("connection", (socket) => {
   socket.data.rooms = new Set();
 
-  socket.on("createGame", ({ state }, ack = () => {}) => {
+  socket.on("createGame", ({ state, player: requestedPlayer }, ack = () => {}) => {
     pruneRooms();
     if (!state || typeof state !== "object") {
       ack({ ok: false, error: "Missing game state." });
@@ -65,17 +65,18 @@ io.on("connection", (socket) => {
     }
 
     const id = createRoomId();
+    const player = requestedPlayer === "B" ? "B" : "W";
     const room = {
       id,
       state,
-      players: { W: socket.id, B: null },
+      players: { W: player === "W" ? socket.id : null, B: player === "B" ? socket.id : null },
       spectators: new Set(),
       updatedAt: Date.now(),
     };
     rooms.set(id, room);
     socket.join(id);
     socket.data.rooms.add(id);
-    ack({ ok: true, roomId: id, player: "W", state: room.state });
+    ack({ ok: true, roomId: id, player, state: room.state });
   });
 
   socket.on("joinGame", ({ roomId }, ack = () => {}) => {
