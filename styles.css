@@ -470,3 +470,35 @@ button {
     height: clamp(38px, 6vw, 59px);
   }
 }
+
+@media (display-mode: standalone) {
+  :root {
+    --standalone-status-bar: max(env(safe-area-inset-top), 28px);
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--standalone-status-bar);
+    z-index: 20;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 1px 0 rgba(32, 36, 42, 0.08);
+    pointer-events: none;
+  }
+
+  .app {
+    min-height: calc(100svh - var(--standalone-status-bar));
+    padding-top: calc(var(--standalone-status-bar) + clamp(4px, 0.7vw, 8px));
+  }
+
+  .board-zone {
+    min-height: calc(100svh - var(--standalone-status-bar) - clamp(8px, 1.4vw, 16px));
+  }
+
+  .game-shell {
+    height: calc(100svh - var(--standalone-status-bar) - clamp(8px, 1.4vw, 16px));
+  }
+}

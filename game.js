@@ -240,31 +240,8 @@ function canBuildWall(edgeKeyValue, owner) {
   );
 }
 
-function connectedWallCountForCell(cell, owner) {
-  const ownedEdges = cell.edges.filter((key) => state.walls[key] === owner);
-  if (ownedEdges.length < 4) return 0;
-  const remaining = new Set(ownedEdges);
-  let best = 0;
-  while (remaining.size) {
-    const [start] = remaining;
-    const stack = [start];
-    remaining.delete(start);
-    let size = 0;
-    while (stack.length) {
-      const key = stack.pop();
-      size += 1;
-      const edge = edges.get(key);
-      for (const next of [...remaining]) {
-        const other = edges.get(next);
-        if (other.a === edge.a || other.a === edge.b || other.b === edge.a || other.b === edge.b) {
-          remaining.delete(next);
-          stack.push(next);
-        }
-      }
-    }
-    best = Math.max(best, size);
-  }
-  return best;
+function wallCountForCell(cell, owner) {
+  return cell.edges.filter((key) => state.walls[key] === owner).length;
 }
 
 function hasCastleSpacing(cell) {
@@ -284,7 +261,7 @@ function castleBuildReason(cellKeyValue, owner) {
   if (!cell) return "Choose a hex center.";
   if (state.castles[cellKeyValue]) return "That hex already has a castle.";
   if (state.reserves.castles[owner] <= 0) return `${PLAYERS[owner].name} has no castle tiles remaining.`;
-  if (connectedWallCountForCell(cell, owner) < 4) return "Castle needs 4 connected walls around that hex.";
+  if (wallCountForCell(cell, owner) < 4) return "Castle needs 4 walls around that hex.";
   if (!hasCastleSpacing(cell)) return "Castle must be at least one empty hex from any capital or castle.";
   return "";
 }
@@ -447,7 +424,7 @@ function resolveCaptures(actor) {
   for (const [key, castle] of Object.entries(state.castles)) {
     if (castle.capital || castle.owner !== defender) continue;
     const cell = cellByKey(key);
-    if (connectedWallCountForCell(cell, actor) >= 4) {
+    if (wallCountForCell(cell, actor) >= 4) {
       castle.owner = actor;
       addLog(`${PLAYERS[actor].name} captured a castle.`);
     }
