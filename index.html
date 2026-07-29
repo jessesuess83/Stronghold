@@ -10,7 +10,7 @@
     <title>Stronghold</title>
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260728-titlefit1" />
+    <link rel="stylesheet" href="styles.css?v=20260728-online1" />
   </head>
   <body>
     <main class="app">
@@ -23,6 +23,11 @@
             <div class="title-actions">
               <button id="howToBtn" class="secondary how-to-button" title="How to play">How to Play</button>
               <button id="resetBtn" class="secondary" title="New game">New Game</button>
+              <button id="onlineBtn" class="secondary" title="Create online game">Online Game</button>
+            </div>
+            <div class="online-status" id="onlineStatus" hidden>
+              <span id="onlineStatusText">Online game ready.</span>
+              <button id="copyLinkBtn" class="secondary compact" title="Copy invite link">Copy Link</button>
             </div>
           </div>
 
@@ -151,6 +156,6 @@
       </div>
     </div>
 
-    <script src="game.js?v=20260728-scale2"></script>
+    <script src="game.js?v=20260728-online1"></script>
   </body>
 </html>

@@ -27,6 +27,7 @@ const ASSET_PATHS = {
   capitalDark: "assets/capital-dark.png",
   capitalLight: "assets/capital-light.png",
 };
+const ONLINE_SERVER_URL = localStorage.getItem("strongholdServerUrl") || "https://stronghold-multiplayer.onrender.com";
 
 const els = {
   turnTitle: document.getElementById("turnTitle"),
@@ -47,6 +48,10 @@ const els = {
   log: document.getElementById("log"),
   undoButtons: document.querySelectorAll("[data-undo]"),
   reset: document.getElementById("resetBtn"),
+  online: document.getElementById("onlineBtn"),
+  onlineStatus: document.getElementById("onlineStatus"),
+  onlineStatusText: document.getElementById("onlineStatusText"),
+  copyLink: document.getElementById("copyLinkBtn"),
   winReset: document.getElementById("winResetBtn"),
   cancelReset: document.getElementById("cancelResetBtn"),
   confirmReset: document.getElementById("confirmResetBtn"),
@@ -68,6 +73,14 @@ let captureAnimationFrame = null;
 let history = [];
 let assetsReady = false;
 let resizeFrame = null;
+let suppressOnlinePublish = false;
+let onlineGame = {
+  socket: null,
+  roomId: null,
+  player: null,
+  inviteUrl: null,
+  joined: false,
+};
 const assetImages = {};
 
 function cellKey(q, r) {
@@ -184,6 +197,15 @@ function cloneState(value) {
 
 function currentPlayer() {
   return state.turn;
+}
+
+function canActLocally() {
+  return !onlineGame.joined || (onlineGame.player && state.turn === onlineGame.player && !state.winner);
+}
+
+function onlineRoleName(role) {
+  if (role === "W" || role === "B") return PLAYERS[role].name;
+  return "Spectator";
 }
 
 function enemyOf(player) {
@@ -454,6 +476,7 @@ function finishTurn() {
   }
   updateUi();
   draw();
+  publishOnlineState();
 }
 
 function scheduleResize() {
@@ -911,8 +934,120 @@ function edgeAction(key) {
   return null;
 }
 
+function updateOnlineStatus(message = null) {
+  if (!els.onlineStatus) return;
+  els.onlineStatus.hidden = !onlineGame.joined && !message;
+  if (message) {
+    els.onlineStatusText.textContent = message;
+    return;
+  }
+  if (!onlineGame.joined) return;
+  const role = onlineRoleName(onlineGame.player);
+  const turn = state.winner ? `${PLAYERS[state.winner].name} won` : `${PLAYERS[state.turn].name} turn`;
+  els.onlineStatusText.textContent = `Room ${onlineGame.roomId} - ${role} - ${turn}`;
+}
+
+function inviteUrlForRoom(roomId) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("game", roomId);
+  return url.toString();
+}
+
+function loadSocketClient() {
+  return new Promise((resolve, reject) => {
+    if (window.io) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = `${ONLINE_SERVER_URL}/socket.io/socket.io.js`;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Could not load online server."));
+    document.head.appendChild(script);
+  });
+}
+
+async function connectOnlineSocket() {
+  if (onlineGame.socket?.connected) return onlineGame.socket;
+  updateOnlineStatus("Connecting online...");
+  await loadSocketClient();
+  onlineGame.socket = window.io(ONLINE_SERVER_URL, { transports: ["websocket", "polling"] });
+  onlineGame.socket.on("connect_error", () => updateOnlineStatus("Online server unavailable."));
+  onlineGame.socket.on("gameUpdated", ({ state: nextState }) => {
+    suppressOnlinePublish = true;
+    state = cloneState(nextState);
+    selectedKnight = null;
+    pendingTouchEdge = null;
+    pendingTouchCell = null;
+    hover = null;
+    updateUi();
+    draw();
+    suppressOnlinePublish = false;
+  });
+  onlineGame.socket.on("roomClosed", () => {
+    onlineGame.joined = false;
+    updateOnlineStatus("Online room closed.");
+  });
+  onlineGame.socket.on("onlineError", (message) => updateOnlineStatus(message || "Online game error."));
+  return onlineGame.socket;
+}
+
+function publishOnlineState() {
+  if (suppressOnlinePublish || !onlineGame.joined || !onlineGame.socket?.connected || !onlineGame.player) return;
+  onlineGame.socket.emit("submitState", { roomId: onlineGame.roomId, state: cloneState(state) });
+}
+
+async function createOnlineGame() {
+  try {
+    const socket = await connectOnlineSocket();
+    socket.emit("createGame", { state: cloneState(state) }, (response) => {
+      if (!response?.ok) {
+        updateOnlineStatus(response?.error || "Could not create online game.");
+        return;
+      }
+      onlineGame.roomId = response.roomId;
+      onlineGame.player = response.player;
+      onlineGame.inviteUrl = inviteUrlForRoom(response.roomId);
+      onlineGame.joined = true;
+      updateOnlineStatus();
+      updateUi();
+    });
+  } catch (error) {
+    updateOnlineStatus(error.message);
+  }
+}
+
+async function joinOnlineGame(roomId) {
+  try {
+    const socket = await connectOnlineSocket();
+    socket.emit("joinGame", { roomId }, (response) => {
+      if (!response?.ok) {
+        updateOnlineStatus(response?.error || "Could not join online game.");
+        return;
+      }
+      onlineGame.roomId = response.roomId;
+      onlineGame.player = response.player;
+      onlineGame.inviteUrl = inviteUrlForRoom(response.roomId);
+      onlineGame.joined = true;
+      suppressOnlinePublish = true;
+      state = cloneState(response.state);
+      history = [];
+      selectedKnight = null;
+      pendingTouchEdge = null;
+      pendingTouchCell = null;
+      hover = null;
+      updateUi();
+      draw();
+      suppressOnlinePublish = false;
+    });
+  } catch (error) {
+    updateOnlineStatus(error.message);
+  }
+}
+
 function handleBoardClick(event) {
-  if (state.winner) return;
+  if (state.winner || !canActLocally()) return;
   const hit = hitTest(event);
   if (!hit) return;
   const owner = currentPlayer();
@@ -950,7 +1085,7 @@ function handleBoardPointerUp(event) {
     return;
   }
 
-  if (state.winner) return;
+  if (state.winner || !canActLocally()) return;
   const hit = hitTest(event, {
     edgeRadius: pendingTouchEdge ? TOUCH_CONFIRM_EDGE_HIT_RADIUS : TOUCH_EDGE_HIT_RADIUS,
     castleRadius: pendingTouchCell ? TOUCH_CONFIRM_CASTLE_HIT_RADIUS : TOUCH_CASTLE_HIT_RADIUS,
@@ -1017,6 +1152,13 @@ function updateUi() {
   els.turnChip.classList.toggle("black-turn", (state.winner || state.turn) === "B");
   els.whiteHud.classList.toggle("active", !state.winner && state.turn === "W");
   els.blackHud.classList.toggle("active", !state.winner && state.turn === "B");
+  els.online?.classList.toggle("active", onlineGame.joined);
+  els.undoButtons.forEach((button) => {
+    button.disabled = onlineGame.joined;
+    button.title = onlineGame.joined ? "Undo is disabled during online games" : "Undo last action";
+  });
+  if (els.copyLink) els.copyLink.disabled = !onlineGame.inviteUrl;
+  updateOnlineStatus();
   els.whiteScore.textContent = score("W");
   els.blackScore.textContent = score("B");
   els.whiteWalls.textContent = state.reserves.W;
@@ -1036,6 +1178,10 @@ function updateUi() {
 }
 
 function resetGame() {
+  if (onlineGame.joined) {
+    updateOnlineStatus("New Game is local-only for now.");
+    return;
+  }
   state = createInitialState();
   history = [];
   selectedKnight = null;
@@ -1065,6 +1211,17 @@ function undoLastAction() {
 }
 
 els.undoButtons.forEach((button) => button.addEventListener("click", undoLastAction));
+els.online?.addEventListener("click", createOnlineGame);
+els.copyLink?.addEventListener("click", async () => {
+  if (!onlineGame.inviteUrl) return;
+  try {
+    await navigator.clipboard.writeText(onlineGame.inviteUrl);
+    updateOnlineStatus("Invite link copied.");
+    setTimeout(() => updateOnlineStatus(), 1600);
+  } catch (error) {
+    updateOnlineStatus(onlineGame.inviteUrl);
+  }
+});
 els.reset.addEventListener("click", () => {
   els.confirmResetModal.hidden = false;
 });
@@ -1102,6 +1259,8 @@ window.addEventListener("resize", scheduleResize);
 
 buildGeometry();
 resetGame();
+const roomFromUrl = new URLSearchParams(window.location.search).get("game");
+if (roomFromUrl) joinOnlineGame(roomFromUrl.toUpperCase());
 
 Promise.all(
   Object.entries(ASSET_PATHS).map(
