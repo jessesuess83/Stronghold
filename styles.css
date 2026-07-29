@@ -103,6 +103,7 @@ button {
 }
 
 .board-brand,
+.game-credit,
 .castle-reserve,
 .player-control {
   position: absolute;
@@ -135,6 +136,21 @@ button {
   display: flex;
   align-items: center;
   gap: clamp(6px, 1vw, 10px);
+}
+
+.game-credit {
+  top: clamp(10px, 1.4vw, 18px);
+  right: clamp(10px, 1.4vw, 18px);
+  margin: 0;
+  color: rgba(32, 36, 42, 0.72);
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-size: clamp(0.72rem, 1vw, 1rem);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  text-align: right;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(255, 250, 240, 0.72);
 }
 
 .player-control {
@@ -433,8 +449,8 @@ button {
   }
 
   .game-title {
-    font-size: clamp(1.65rem, 2.8vw, 2.25rem);
-    letter-spacing: 0.02em;
+    font-size: clamp(2rem, 3.45vw, 2.85rem);
+    letter-spacing: 0.035em;
   }
 
   .player-hud {
