@@ -23,6 +23,7 @@ body {
 }
 
 body {
+  min-height: 100dvh;
   margin: 0;
   color: var(--ink);
   background:
@@ -39,23 +40,25 @@ button {
 
 .app {
   display: grid;
-  grid-template-columns: minmax(1150px, 1fr);
-  min-height: 100%;
-  padding: 6px;
+  grid-template-columns: 1fr;
+  min-height: 100dvh;
+  padding: clamp(4px, 0.7vw, 8px);
 }
 
 .board-zone {
   display: flex;
-  min-width: 1150px;
-  min-height: calc(100vh - 12px);
+  width: 100%;
+  min-width: 0;
+  min-height: calc(100dvh - clamp(8px, 1.4vw, 16px));
 }
 
 .game-shell {
   position: relative;
   flex: 1;
-  height: max(836px, calc(100vh - 12px));
-  min-width: 1150px;
-  min-height: 836px;
+  width: 100%;
+  height: calc(100dvh - clamp(8px, 1.4vw, 16px));
+  min-width: 0;
+  min-height: 560px;
   border: 1px solid rgba(32, 36, 42, 0.08);
   border-radius: 5px;
   background:
@@ -104,17 +107,17 @@ button {
 }
 
 .board-brand {
-  top: 16px;
-  left: 16px;
+  top: clamp(8px, 1.4vw, 16px);
+  left: clamp(8px, 1.4vw, 16px);
   display: grid;
-  gap: 10px;
+  gap: clamp(7px, 1vw, 10px);
 }
 
 .game-title {
   margin: 0;
   color: #20242a;
   font-family: "Cinzel", Georgia, "Times New Roman", serif;
-  font-size: 3.63rem;
+  font-size: clamp(2rem, 4.7vw, 3.63rem);
   font-weight: 900;
   letter-spacing: 0.04em;
   line-height: 0.95;
@@ -127,35 +130,35 @@ button {
 .title-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: clamp(6px, 1vw, 10px);
 }
 
 .player-control {
-  bottom: 16px;
+  bottom: clamp(8px, 1.4vw, 16px);
   display: flex;
   align-items: end;
-  gap: 10px;
+  gap: clamp(6px, 1vw, 10px);
 }
 
 .castle-reserve {
   top: 50%;
   display: grid;
-  gap: 8px;
+  gap: clamp(4px, 0.7vw, 8px);
   transform: translateY(-50%);
 }
 
 .white-castle-reserve {
-  left: 16px;
+  left: clamp(8px, 1.4vw, 16px);
 }
 
 .black-castle-reserve {
-  right: 16px;
+  right: clamp(8px, 1.4vw, 16px);
 }
 
 .castle-token {
   display: grid;
-  width: 90px;
-  height: 80px;
+  width: clamp(46px, 7.8vw, 90px);
+  height: clamp(42px, 6.95vw, 80px);
   place-items: center;
   clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
   background: rgba(255, 250, 240, 0.78);
@@ -164,8 +167,8 @@ button {
 
 .castle-token img {
   display: block;
-  width: 83px;
-  height: 83px;
+  width: clamp(43px, 7.2vw, 83px);
+  height: clamp(43px, 7.2vw, 83px);
   object-fit: cover;
   clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
 }
@@ -176,8 +179,8 @@ button {
 }
 
 .player-hud {
-  width: 220px;
-  padding: 13px 14px;
+  width: clamp(148px, 19vw, 220px);
+  padding: clamp(9px, 1vw, 13px) clamp(10px, 1.1vw, 14px);
   border: 1px solid rgba(32, 36, 42, 0.22);
   border-radius: 8px;
   background: rgba(255, 250, 240, 0.78);
@@ -186,11 +189,11 @@ button {
 }
 
 .white-control {
-  left: 16px;
+  left: clamp(8px, 1.4vw, 16px);
 }
 
 .black-control {
-  right: 16px;
+  right: clamp(8px, 1.4vw, 16px);
 }
 
 .black-hud {
@@ -217,16 +220,16 @@ button {
 
 .hud-heading span {
   font-family: "Cinzel", Georgia, "Times New Roman", serif;
-  font-size: 1.48rem;
+  font-size: clamp(1.05rem, 1.6vw, 1.48rem);
   font-weight: 900;
   line-height: 1;
   text-transform: uppercase;
 }
 
 .hud-stats {
-  margin-top: 12px;
+  margin-top: clamp(7px, 1vw, 12px);
   color: rgba(32, 36, 42, 0.72);
-  font-size: 1rem;
+  font-size: clamp(0.82rem, 1.1vw, 1rem);
   font-weight: 900;
 }
 
@@ -237,12 +240,12 @@ button {
 .hud-stats strong {
   margin-left: 6px;
   color: inherit;
-  font-size: 1.44rem;
+  font-size: clamp(1.06rem, 1.55vw, 1.44rem);
 }
 
 .secondary {
-  min-height: 38px;
-  padding: 0 13px;
+  min-height: clamp(34px, 3.3vw, 38px);
+  padding: 0 clamp(10px, 1.1vw, 13px);
   border: 1px solid rgba(32, 36, 42, 0.2);
   border-radius: 8px;
   background: rgba(255, 253, 247, 0.84);
@@ -351,26 +354,86 @@ button {
   right: 16px;
 }
 
-@media (max-width: 920px) {
-  .app {
-    grid-template-columns: minmax(900px, 1fr);
-  }
-
-  .board-zone {
-    min-width: 900px;
-  }
-
+@media (max-width: 720px) {
   .game-shell {
-    height: 836px;
-    min-width: 900px;
-    min-height: 836px;
+    min-height: 620px;
   }
 
-  .game-title {
-    font-size: 2.97rem;
+  .title-actions {
+    flex-wrap: wrap;
+  }
+
+  .player-control {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .black-control {
+    align-items: end;
+    flex-direction: column-reverse;
   }
 
   .player-hud {
-    width: 198px;
+    width: clamp(132px, 36vw, 168px);
+  }
+
+  .secondary {
+    font-size: 0.86rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .game-shell {
+    min-height: 640px;
+  }
+
+  .board-brand {
+    max-width: calc(100% - 16px);
+  }
+
+  .game-title {
+    font-size: clamp(1.75rem, 9vw, 2.55rem);
+  }
+
+  .castle-reserve {
+    top: 48%;
+  }
+
+  .player-control {
+    max-width: 42vw;
+  }
+
+  .player-hud {
+    width: 100%;
+  }
+
+  .hud-stats span {
+    display: grid;
+    gap: 1px;
+  }
+
+  .hud-stats strong {
+    margin-left: 0;
+  }
+}
+
+@media (max-height: 650px) and (orientation: landscape) {
+  .game-shell {
+    height: calc(100dvh - 8px);
+    min-height: 480px;
+  }
+
+  .game-title {
+    font-size: clamp(1.75rem, 4vw, 2.6rem);
+  }
+
+  .castle-token {
+    width: clamp(40px, 6.5vw, 64px);
+    height: clamp(36px, 5.8vw, 57px);
+  }
+
+  .castle-token img {
+    width: clamp(38px, 6vw, 59px);
+    height: clamp(38px, 6vw, 59px);
   }
 }
