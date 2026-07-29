@@ -82,6 +82,14 @@ function edgeKey(a, b) {
   return [a, b].sort().join("|");
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function renderedHexDiameter() {
+  return HEX_SIZE * layout.scale * 2;
+}
+
 function axialToPixel(q, r) {
   return {
     x: HEX_SIZE * Math.sqrt(3) * (q + r / 2),
@@ -536,13 +544,15 @@ function drawWall(key, owner, preview = false) {
   const edge = edges.get(key);
   const a = toScreen(vertices.get(edge.a));
   const b = toScreen(vertices.get(edge.b));
+  const hexDiameter = renderedHexDiameter();
+  const wallWidth = clamp(hexDiameter * 0.05, 4, 8);
 
   if (preview) {
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
     ctx.strokeStyle = "rgba(212, 154, 36, 0.72)";
-    ctx.lineWidth = 13;
+    ctx.lineWidth = wallWidth + clamp(hexDiameter * 0.045, 4, 6);
     ctx.lineCap = "round";
     ctx.stroke();
   }
@@ -551,7 +561,7 @@ function drawWall(key, owner, preview = false) {
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.strokeStyle = owner === "W" ? "#fffaf0" : "#1f252c";
-  ctx.lineWidth = 7;
+  ctx.lineWidth = wallWidth;
   ctx.lineCap = "round";
   ctx.shadowColor = preview ? "rgba(212, 154, 36, 0.35)" : "rgba(0, 0, 0, 0.28)";
   ctx.shadowBlur = preview ? 8 : 5;
@@ -559,7 +569,7 @@ function drawWall(key, owner, preview = false) {
   ctx.shadowBlur = 0;
   if (owner === "B") {
     ctx.strokeStyle = "#06080a";
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = clamp(hexDiameter * 0.009, 0.8, 1.4);
     ctx.stroke();
   }
 }
@@ -568,11 +578,12 @@ function drawBreakPreview(key) {
   const edge = edges.get(key);
   const a = toScreen(vertices.get(edge.a));
   const b = toScreen(vertices.get(edge.b));
+  const hexDiameter = renderedHexDiameter();
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(b.x, b.y);
   ctx.strokeStyle = "rgba(168, 75, 68, 0.92)";
-  ctx.lineWidth = 14;
+  ctx.lineWidth = clamp(hexDiameter * 0.095, 8, 14);
   ctx.lineCap = "round";
   ctx.stroke();
 }
@@ -638,8 +649,9 @@ function drawCastleBacking(x, y, size, owner) {
 function drawCastle(cell, castle) {
   if (!assetsReady) return;
   const center = toScreen(cell);
-  const size = castle.capital ? 95 : 83;
-  const borderSize = castle.capital ? HEX_SIZE * 2 : size;
+  const hexDiameter = renderedHexDiameter();
+  const borderSize = castle.capital ? Math.max(41, hexDiameter * 0.663) : clamp(hexDiameter * 0.576, 43, 75);
+  const size = castle.capital ? Math.max(32, hexDiameter * 0.527) : clamp(hexDiameter * 0.544, 40, 72);
   const castleImage = castle.capital
     ? assetImages[castle.owner === "W" ? "capitalDark" : "capitalLight"]
     : assetImages[castle.owner === "W" ? "castleB" : "castleW"];
@@ -689,15 +701,19 @@ function drawKnight(knight) {
   if (!assetsReady) return;
   const point = toScreen(vertices.get(knight.vertex));
   const selected = selectedKnight === knight.id;
+  const hexDiameter = renderedHexDiameter();
+  const backingSize = clamp(hexDiameter * (selected ? 0.313 : 0.277), 25, 40);
+  const iconSize = clamp(hexDiameter * (selected ? 0.292 : 0.256), 23, 37);
+  const selectionRadius = backingSize * 0.55;
   const knightImage = assetImages[knight.owner === "W" ? "knightB" : "knightW"];
   if (knightImage?.complete && knightImage.naturalWidth > 0) {
-    drawKnightBacking(point.x, point.y, selected ? 49 : 43, knight.owner);
+    drawKnightBacking(point.x, point.y, backingSize, knight.owner);
     if (selected) {
       ctx.beginPath();
       for (let i = 0; i < 6; i += 1) {
         const angle = ((30 + i * 60) * Math.PI) / 180;
-        const px = point.x + 27 * Math.cos(angle);
-        const py = point.y + 27 * Math.sin(angle);
+        const px = point.x + selectionRadius * Math.cos(angle);
+        const py = point.y + selectionRadius * Math.sin(angle);
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
@@ -706,7 +722,7 @@ function drawKnight(knight) {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-    drawImageIcon(knightImage, point.x, point.y, selected ? 46 : 41, "none");
+    drawImageIcon(knightImage, point.x, point.y, iconSize, "none");
   } else {
     ctx.beginPath();
     ctx.arc(point.x, point.y, selected ? 16 : 13, 0, Math.PI * 2);
@@ -788,10 +804,11 @@ function draw() {
 
   if (hover?.kind === "cell" && canBuildCastle(hover.key, currentPlayer())) {
     const center = toScreen(cellByKey(hover.key));
+    const castleTargetRadius = clamp(renderedHexDiameter() * (pendingTouchCell?.key === hover.key ? 0.34 : 0.3), 22, 38);
     ctx.beginPath();
-    ctx.arc(center.x, center.y, pendingTouchCell?.key === hover.key ? 48 : 43, 0, Math.PI * 2);
+    ctx.arc(center.x, center.y, castleTargetRadius, 0, Math.PI * 2);
     ctx.strokeStyle = pendingTouchCell?.key === hover.key ? "rgba(212, 154, 36, 0.92)" : "rgba(108, 141, 85, 0.9)";
-    ctx.lineWidth = pendingTouchCell?.key === hover.key ? 7 : 5;
+    ctx.lineWidth = clamp(renderedHexDiameter() * (pendingTouchCell?.key === hover.key ? 0.05 : 0.036), 3, 6);
     ctx.stroke();
   }
 
