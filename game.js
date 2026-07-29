@@ -27,7 +27,7 @@ const ASSET_PATHS = {
   capitalDark: "assets/capital-dark.png",
   capitalLight: "assets/capital-light.png",
 };
-const ONLINE_SERVER_URL = localStorage.getItem("strongholdServerUrl") || "https://stronghold-mulitplayer.onrender.com";
+const ONLINE_SERVER_URL = localStorage.getItem("strongholdServerUrl") || "https://stronghold-online.onrender.com";
 
 const els = {
   turnTitle: document.getElementById("turnTitle"),

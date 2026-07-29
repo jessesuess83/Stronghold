@@ -37,7 +37,7 @@ Render setup:
 - Set the root directory to `server`.
 - Build command: `npm install`
 - Start command: `npm start`
-- After Render gives you a service URL, update `ONLINE_SERVER_URL` in `game.js` if it differs from `https://stronghold-mulitplayer.onrender.com`.
+- After Render gives you a service URL, update `ONLINE_SERVER_URL` in `game.js` if it differs from `https://stronghold-online.onrender.com`.
 
 Online play flow:
 
