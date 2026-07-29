@@ -433,7 +433,8 @@ button {
   }
 
   .game-title {
-    font-size: clamp(2.1rem, 3.8vw, 3rem);
+    font-size: clamp(1.65rem, 2.8vw, 2.25rem);
+    letter-spacing: 0.02em;
   }
 
   .player-hud {
