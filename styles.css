@@ -103,12 +103,20 @@ button {
 }
 
 .board-brand,
-.game-credit,
+.creator-panel,
 .castle-reserve,
 .player-control {
   position: absolute;
   z-index: 4;
   pointer-events: auto;
+}
+
+.creator-panel {
+  top: clamp(10px, 1.4vw, 18px);
+  right: clamp(10px, 1.4vw, 18px);
+  display: grid;
+  justify-items: end;
+  gap: 8px;
 }
 
 .board-brand {
@@ -138,31 +146,39 @@ button {
   gap: clamp(6px, 1vw, 10px);
 }
 
+.online-role,
 .online-status {
-  display: flex;
   width: fit-content;
-  max-width: min(360px, calc(100vw - 32px));
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid rgba(32, 36, 42, 0.18);
+  max-width: min(260px, calc(100vw - 32px));
+  justify-self: end;
+  margin: 0;
+  padding: 5px 8px;
+  border: 1px solid rgba(32, 36, 42, 0.16);
   border-radius: 8px;
-  background: rgba(255, 250, 240, 0.82);
+  background: rgba(255, 250, 240, 0.78);
   color: rgba(32, 36, 42, 0.78);
   font-size: clamp(0.72rem, 0.95vw, 0.88rem);
   font-weight: 850;
   line-height: 1.15;
-  box-shadow: 0 8px 18px rgba(32, 36, 42, 0.1);
+  text-align: right;
+  box-shadow: 0 8px 18px rgba(32, 36, 42, 0.08);
 }
 
-.online-status[hidden] {
+.online-role {
+  color: #20242a;
+  font-weight: 950;
+}
+
+.online-role[hidden],
+.online-status[hidden],
+.compact[hidden] {
   display: none;
 }
 
 .compact {
-  min-height: 28px;
-  padding: 0 9px;
-  font-size: 0.78rem;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 0.82rem;
 }
 
 .secondary.active {
@@ -177,8 +193,6 @@ button {
 }
 
 .game-credit {
-  top: clamp(10px, 1.4vw, 18px);
-  right: clamp(10px, 1.4vw, 18px);
   margin: 0;
   color: rgba(32, 36, 42, 0.72);
   font-family: "Cinzel", Georgia, "Times New Roman", serif;
@@ -419,6 +433,10 @@ button {
 
   .title-actions {
     flex-wrap: wrap;
+  }
+
+  .creator-panel {
+    gap: 6px;
   }
 
   .player-control {

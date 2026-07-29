@@ -16,7 +16,7 @@ Then visit `http://127.0.0.1:4173/`.
 
 - Side-4 hex board with opposite capital cities.
 - 5 knights and 40 walls per player.
-- 3 reserve castle tiles per player.
+- 6 shared reserve castle tiles total.
 - First player to control 4 castles wins.
 - Context-sensitive board controls:
   - click a friendly knight to select or deselect it

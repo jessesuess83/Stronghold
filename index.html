@@ -10,7 +10,7 @@
     <title>Stronghold</title>
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260728-online1" />
+    <link rel="stylesheet" href="styles.css?v=20260728-online2" />
   </head>
   <body>
     <main class="app">
@@ -22,16 +22,17 @@
             <h1 class="game-title">Stronghold</h1>
             <div class="title-actions">
               <button id="howToBtn" class="secondary how-to-button" title="How to play">How to Play</button>
-              <button id="resetBtn" class="secondary" title="New game">New Game</button>
-              <button id="onlineBtn" class="secondary" title="Create online game">Online Game</button>
-            </div>
-            <div class="online-status" id="onlineStatus" hidden>
-              <span id="onlineStatusText">Online game ready.</span>
-              <button id="copyLinkBtn" class="secondary compact" title="Copy invite link">Copy Link</button>
+              <button id="resetBtn" class="secondary" title="Start local game">Local Game</button>
             </div>
           </div>
 
-          <p class="game-credit">A game by Ceaseless Wonders</p>
+          <div class="creator-panel" aria-label="Creator and online game controls">
+            <p class="game-credit">A game by Ceaseless Wonders</p>
+            <button id="onlineBtn" class="secondary" title="Create online game">Online Game</button>
+            <p class="online-role" id="onlineRole" hidden>You are White</p>
+            <button id="copyLinkBtn" class="secondary compact" title="Copy invite link" hidden>Copy Link</button>
+            <p class="online-status" id="onlineStatus" hidden>Online game ready.</p>
+          </div>
 
           <span class="sr-only" id="turnTitle">White Turn</span>
           <span class="sr-only" id="turnChip">W</span>
@@ -91,11 +92,11 @@
 
     <div class="confirm-modal" id="confirmResetModal" hidden>
       <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="confirmResetTitle">
-        <p class="eyebrow">New Game</p>
+        <p class="eyebrow">Local Game</p>
         <h2 id="confirmResetTitle">Are you sure?</h2>
         <div class="confirm-actions">
           <button id="cancelResetBtn" class="secondary" title="Keep current game">Cancel</button>
-          <button id="confirmResetBtn" class="secondary danger" title="Start a new game">New Game</button>
+          <button id="confirmResetBtn" class="secondary danger" title="Start local game">Local Game</button>
         </div>
       </div>
     </div>
@@ -156,6 +157,6 @@
       </div>
     </div>
 
-    <script src="game.js?v=20260728-online3"></script>
+    <script src="game.js?v=20260728-online4"></script>
   </body>
 </html>

@@ -12,7 +12,7 @@ const TOUCH_CONFIRM_EDGE_HIT_RADIUS = 16;
 const CASTLE_HIT_RADIUS = 30;
 const TOUCH_CASTLE_HIT_RADIUS = 42;
 const TOUCH_CONFIRM_CASTLE_HIT_RADIUS = 50;
-const CASTLE_TILE_RESERVE = 3;
+const CASTLE_TILE_RESERVE = 6;
 const WIN_CASTLE_COUNT = 4;
 const BOARD_SCALE = 0.99;
 const PLAYERS = {
@@ -49,8 +49,8 @@ const els = {
   undoButtons: document.querySelectorAll("[data-undo]"),
   reset: document.getElementById("resetBtn"),
   online: document.getElementById("onlineBtn"),
+  onlineRole: document.getElementById("onlineRole"),
   onlineStatus: document.getElementById("onlineStatus"),
-  onlineStatusText: document.getElementById("onlineStatusText"),
   copyLink: document.getElementById("copyLinkBtn"),
   winReset: document.getElementById("winResetBtn"),
   cancelReset: document.getElementById("cancelResetBtn"),
@@ -186,7 +186,7 @@ function createInitialState() {
       ...whiteStart.map((v, i) => ({ id: `W${i + 1}`, owner: "W", vertex: v })),
       ...blackStart.map((v, i) => ({ id: `B${i + 1}`, owner: "B", vertex: v })),
     ],
-    reserves: { W: 40, B: 40, castles: { W: CASTLE_TILE_RESERVE, B: CASTLE_TILE_RESERVE } },
+    reserves: { W: 40, B: 40, castles: CASTLE_TILE_RESERVE },
     log: ["White begins."],
   };
 }
@@ -206,6 +206,15 @@ function canActLocally() {
 function onlineRoleName(role) {
   if (role === "W" || role === "B") return PLAYERS[role].name;
   return "Spectator";
+}
+
+function showOnlineTurnBlocked() {
+  if (!onlineGame.joined) return;
+  const message = onlineGame.player
+    ? `Waiting for ${PLAYERS[state.turn].name}. You are ${onlineRoleName(onlineGame.player)}.`
+    : `Spectating. ${PLAYERS[state.turn].name} to move.`;
+  updateOnlineStatus(message);
+  window.setTimeout(() => updateOnlineStatus(), 1600);
 }
 
 function enemyOf(player) {
@@ -282,7 +291,7 @@ function castleBuildReason(cellKeyValue, owner) {
   const cell = cellByKey(cellKeyValue);
   if (!cell) return "Choose a hex center.";
   if (state.castles[cellKeyValue]) return "That hex already has a castle.";
-  if (state.reserves.castles[owner] <= 0) return `${PLAYERS[owner].name} has no castle tiles remaining.`;
+  if (state.reserves.castles <= 0) return "No castle tiles remain.";
   if (wallCountForCell(cell, owner) < 4) return "Castle needs 4 walls around that hex.";
   if (!hasCastleSpacing(cell)) return "Castle must be at least one empty hex from any capital or castle.";
   return "";
@@ -390,8 +399,8 @@ function buildCastle(key) {
     return false;
   }
   pushHistory();
-  state.castles[key] = { owner, capital: false };
-  state.reserves.castles[owner] -= 1;
+  state.castles[key] = { owner, capital: false, builtBy: owner };
+  state.reserves.castles -= 1;
   addLog(`${PLAYERS[owner].name} raised a castle.`);
   finishTurn();
   return true;
@@ -935,16 +944,23 @@ function edgeAction(key) {
 }
 
 function updateOnlineStatus(message = null) {
-  if (!els.onlineStatus) return;
-  els.onlineStatus.hidden = !onlineGame.joined && !message;
-  if (message) {
-    els.onlineStatusText.textContent = message;
-    return;
+  if (els.onlineRole) {
+    els.onlineRole.hidden = !onlineGame.joined;
+    if (onlineGame.joined) {
+      els.onlineRole.textContent = onlineGame.player
+        ? `You are ${onlineRoleName(onlineGame.player)}`
+        : "Spectating";
+    }
   }
-  if (!onlineGame.joined) return;
-  const role = onlineRoleName(onlineGame.player);
-  const turn = state.winner ? `${PLAYERS[state.winner].name} won` : `${PLAYERS[state.turn].name} turn`;
-  els.onlineStatusText.textContent = `Room ${onlineGame.roomId} - ${role} - ${turn}`;
+
+  if (els.copyLink) {
+    els.copyLink.hidden = !onlineGame.inviteUrl;
+    els.copyLink.disabled = !onlineGame.inviteUrl;
+  }
+
+  if (!els.onlineStatus) return;
+  els.onlineStatus.hidden = !message;
+  els.onlineStatus.textContent = message || "";
 }
 
 function inviteUrlForRoom(roomId) {
@@ -982,6 +998,7 @@ async function connectOnlineSocket() {
     pendingTouchCell = null;
     hover = null;
     updateUi();
+    if (state.winner && els.winModal) els.winModal.hidden = false;
     draw();
     suppressOnlinePublish = false;
   });
@@ -1047,7 +1064,11 @@ async function joinOnlineGame(roomId) {
 }
 
 function handleBoardClick(event) {
-  if (state.winner || !canActLocally()) return;
+  if (state.winner) return;
+  if (!canActLocally()) {
+    showOnlineTurnBlocked();
+    return;
+  }
   const hit = hitTest(event);
   if (!hit) return;
   const owner = currentPlayer();
@@ -1085,7 +1106,11 @@ function handleBoardPointerUp(event) {
     return;
   }
 
-  if (state.winner || !canActLocally()) return;
+  if (state.winner) return;
+  if (!canActLocally()) {
+    showOnlineTurnBlocked();
+    return;
+  }
   const hit = hitTest(event, {
     edgeRadius: pendingTouchEdge ? TOUCH_CONFIRM_EDGE_HIT_RADIUS : TOUCH_EDGE_HIT_RADIUS,
     castleRadius: pendingTouchCell ? TOUCH_CONFIRM_CASTLE_HIT_RADIUS : TOUCH_CASTLE_HIT_RADIUS,
@@ -1157,17 +1182,15 @@ function updateUi() {
     button.disabled = onlineGame.joined;
     button.title = onlineGame.joined ? "Undo is disabled during online games" : "Undo last action";
   });
-  if (els.copyLink) els.copyLink.disabled = !onlineGame.inviteUrl;
   updateOnlineStatus();
   els.whiteScore.textContent = score("W");
   els.blackScore.textContent = score("B");
   els.whiteWalls.textContent = state.reserves.W;
   els.blackWalls.textContent = state.reserves.B;
-  els.castleReserve.textContent = state.reserves.castles.W + state.reserves.castles.B;
-  els.castleTokens.forEach((token) => {
-    const owner = token.dataset.castleToken;
-    const ownerIndex = [...els.castleTokens].filter((item) => item.dataset.castleToken === owner).indexOf(token);
-    const spent = ownerIndex >= state.reserves.castles[owner];
+  els.castleReserve.textContent = state.reserves.castles;
+  const spentCastleCount = CASTLE_TILE_RESERVE - state.reserves.castles;
+  els.castleTokens.forEach((token, index) => {
+    const spent = index < spentCastleCount;
     token.hidden = spent;
     token.parentElement.hidden = spent;
   });
@@ -1179,7 +1202,7 @@ function updateUi() {
 
 function resetGame() {
   if (onlineGame.joined) {
-    updateOnlineStatus("New Game is local-only for now.");
+    updateOnlineStatus("Local Game is disabled during online games.");
     return;
   }
   state = createInitialState();
@@ -1246,6 +1269,11 @@ canvas.addEventListener("pointermove", (event) => {
   if (event.pointerType === "touch") return;
   pendingTouchEdge = null;
   pendingTouchCell = null;
+  if (!canActLocally()) {
+    hover = null;
+    draw();
+    return;
+  }
   hover = hitTest(event);
   draw();
 });
