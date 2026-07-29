@@ -388,6 +388,7 @@ button {
 
 .win-modal,
 .confirm-modal,
+.ai-color-modal,
 .online-color-modal,
 .how-to-modal {
   position: fixed;
@@ -401,6 +402,7 @@ button {
 
 .win-modal[hidden],
 .confirm-modal[hidden],
+.ai-color-modal[hidden],
 .online-color-modal[hidden],
 .how-to-modal[hidden] {
   display: none;
@@ -428,6 +430,7 @@ button {
 }
 
 .confirm-modal .dialog-card,
+.ai-color-modal .dialog-card,
 .online-color-modal .dialog-card {
   display: grid;
   font-family: "Cinzel", Georgia, "Times New Roman", serif;
@@ -435,6 +438,7 @@ button {
   gap: 14px;
 }
 
+.ai-color-modal .dialog-card h2,
 .online-color-modal .dialog-card h2 {
   margin-bottom: 2px;
 }

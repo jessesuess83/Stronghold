@@ -48,6 +48,9 @@ const els = {
   log: document.getElementById("log"),
   undoButtons: document.querySelectorAll("[data-undo]"),
   reset: document.getElementById("resetBtn"),
+  ai: document.getElementById("aiBtn"),
+  aiColorModal: document.getElementById("aiColorModal"),
+  aiColorButtons: document.querySelectorAll("[data-ai-color]"),
   online: document.getElementById("onlineBtn"),
   onlineColorModal: document.getElementById("onlineColorModal"),
   onlineColorChoice: document.getElementById("onlineColorChoice"),
@@ -58,6 +61,7 @@ const els = {
   winReset: document.getElementById("winResetBtn"),
   cancelReset: document.getElementById("cancelResetBtn"),
   confirmReset: document.getElementById("confirmResetBtn"),
+  cancelAiColor: document.getElementById("cancelAiColorBtn"),
   cancelOnlineColor: document.getElementById("cancelOnlineColorBtn"),
   howTo: document.getElementById("howToBtn"),
   closeHowTo: document.getElementById("closeHowToBtn"),
@@ -79,6 +83,11 @@ let assetsReady = false;
 let resizeFrame = null;
 let suppressOnlinePublish = false;
 let preferredOnlinePlayer = "W";
+let aiGame = {
+  enabled: false,
+  player: "B",
+  thinking: false,
+};
 let onlineGame = {
   socket: null,
   roomId: null,
@@ -205,7 +214,9 @@ function currentPlayer() {
 }
 
 function canActLocally() {
-  return !onlineGame.joined || (onlineGame.player && state.turn === onlineGame.player && !state.winner);
+  if (state.winner) return false;
+  if (aiGame.enabled && state.turn === aiGame.player) return false;
+  return !onlineGame.joined || (onlineGame.player && state.turn === onlineGame.player);
 }
 
 function onlineRoleName(role) {
@@ -415,6 +426,427 @@ function buildCastle(key) {
   return true;
 }
 
+function legalActionsForPlayer(owner) {
+  if (state.winner) return [];
+  const actions = [];
+
+  for (const cell of cells) {
+    if (canBuildCastle(cell.key, owner)) actions.push({ type: "buildCastle", cell: cell.key });
+  }
+
+  for (const [key, wallOwner] of Object.entries(state.walls)) {
+    if (wallOwner === enemyOf(owner) && canDestroyWall(key, owner)) actions.push({ type: "destroyWall", edge: key });
+  }
+
+  for (const edge of edges.values()) {
+    if (canBuildWall(edge.key, owner)) actions.push({ type: "buildWall", edge: edge.key });
+  }
+
+  for (const knight of state.knights) {
+    if (knight.owner !== owner) continue;
+    for (const target of legalMoveTargets(knight)) actions.push({ type: "move", knightId: knight.id, to: target });
+  }
+
+  return actions;
+}
+
+function mutateAction(action, owner, options = {}) {
+  const writeLog = options.log ?? true;
+  if (action.type === "move") {
+    const knight = state.knights.find((item) => item.id === action.knightId && item.owner === owner);
+    if (!knight || !legalMoveTargets(knight).has(action.to)) return false;
+    knight.vertex = action.to;
+    if (writeLog) addLog(`${PLAYERS[owner].name} moved ${knight.id}.`);
+    return true;
+  }
+  if (action.type === "buildWall") {
+    if (!canBuildWall(action.edge, owner)) return false;
+    state.walls[action.edge] = owner;
+    state.reserves[owner] -= 1;
+    if (writeLog) addLog(`${PLAYERS[owner].name} built a wall.`);
+    return true;
+  }
+  if (action.type === "destroyWall") {
+    if (!canDestroyWall(action.edge, owner)) return false;
+    const wallOwner = state.walls[action.edge];
+    delete state.walls[action.edge];
+    state.reserves[wallOwner] += 1;
+    if (writeLog) addLog(`${PLAYERS[owner].name} broke an enemy wall.`);
+    return true;
+  }
+  if (action.type === "buildCastle") {
+    if (!canBuildCastle(action.cell, owner)) return false;
+    state.castles[action.cell] = { owner, capital: false, builtBy: owner };
+    state.reserves.castles -= 1;
+    if (writeLog) addLog(`${PLAYERS[owner].name} raised a castle.`);
+    return true;
+  }
+  return false;
+}
+
+function applyAction(action, options = {}) {
+  const owner = currentPlayer();
+  if (options.history ?? true) pushHistory();
+  if (!mutateAction(action, owner, { log: options.log ?? true })) {
+    if (options.history ?? true) history.pop();
+    return false;
+  }
+  finishTurn({
+    render: options.render ?? true,
+    publish: options.publish ?? true,
+    animate: options.animate ?? true,
+    log: options.log ?? true,
+  });
+  return true;
+}
+
+
+function castleReserveGone() {
+  return state.reserves.castles <= 0;
+}
+
+function castleThreatScore(owner) {
+  let value = 0;
+  const enemy = enemyOf(owner);
+  for (const cell of cells) {
+    if (state.castles[cell.key]?.capital) continue;
+    const ownWalls = wallCountForCell(cell, owner);
+    const enemyWalls = wallCountForCell(cell, enemy);
+    const emptyEdges = cell.edges.filter((key) => !state.walls[key]).length;
+    const canPlaceCastle = !state.castles[cell.key] && hasCastleSpacing(cell);
+    const targetValue = state.castles[cell.key]?.owner === enemy ? 1.35 : 1;
+
+    if (ownWalls >= 4 && (canPlaceCastle || state.castles[cell.key]?.owner === enemy)) value += 1450 * targetValue;
+    else if (ownWalls === 3 && emptyEdges >= 1 && canPlaceCastle) value += 520;
+    else if (ownWalls === 2 && emptyEdges >= 2 && canPlaceCastle) value += 170;
+    else if (ownWalls === 1 && emptyEdges >= 3 && canPlaceCastle) value += 35;
+
+    if (ownWalls >= 3 && enemyWalls === 0) value += 120;
+    if (ownWalls >= 2 && enemyWalls === 0) value += 45;
+  }
+  return value;
+}
+
+function captureThreatScore(owner) {
+  let value = 0;
+  const enemy = enemyOf(owner);
+  for (const [key, castle] of Object.entries(state.castles)) {
+    if (castle.capital || castle.owner !== enemy) continue;
+    const cell = cellByKey(key);
+    const ownWalls = wallCountForCell(cell, owner);
+    const enemyWalls = wallCountForCell(cell, enemy);
+    const emptyEdges = cell.edges.filter((edgeKeyValue) => !state.walls[edgeKeyValue]).length;
+    if (ownWalls >= 4) value += 8200;
+    else if (ownWalls === 3 && emptyEdges >= 1) value += 3300;
+    else if (ownWalls === 2 && emptyEdges >= 2) value += 1250;
+    else if (ownWalls === 1 && emptyEdges >= 3) value += 260;
+    value -= enemyWalls * 90;
+  }
+  return value;
+}
+
+function capitalCell(owner) {
+  const entry = Object.entries(state.castles).find(([, castle]) => castle.owner === owner && castle.capital);
+  return entry ? cellByKey(entry[0]) : null;
+}
+
+function nearestCastleDistance(vertexKeyValue, owner, options = {}) {
+  const point = vertices.get(vertexKeyValue);
+  let best = Infinity;
+  for (const [key, castle] of Object.entries(state.castles)) {
+    if (castle.capital && !options.includeCapitals) continue;
+    if (castle.owner !== owner) continue;
+    const cell = cellByKey(key);
+    const dist = Math.hypot(point.x - cell.x, point.y - cell.y) / HEX_SIZE;
+    if (dist < best) best = dist;
+  }
+  return best;
+}
+
+function adjacentWallCounts(vertexKeyValue, owner) {
+  const counts = { own: 0, enemy: 0, vulnerableEnemy: 0 };
+  for (const key of vertices.get(vertexKeyValue)?.edges || []) {
+    if (state.walls[key] === owner) counts.own += 1;
+    if (state.walls[key] === enemyOf(owner)) {
+      counts.enemy += 1;
+      if (!isWallProtected(key)) counts.vulnerableEnemy += 1;
+    }
+  }
+  return counts;
+}
+
+function knightDevelopmentScore(owner) {
+  const home = capitalCell(owner);
+  let value = 0;
+  for (const knight of state.knights) {
+    if (knight.owner !== owner) continue;
+    const point = vertices.get(knight.vertex);
+    const homeDistance = home ? Math.hypot(point.x - home.x, point.y - home.y) / HEX_SIZE : 0;
+    const enemyCastleDistance = nearestCastleDistance(knight.vertex, enemyOf(owner));
+    const ownCastleDistance = nearestCastleDistance(knight.vertex, owner);
+    const adjacent = adjacentWallCounts(knight.vertex, owner);
+
+    value += Math.min(homeDistance, 4.5) * (castleReserveGone() ? 115 : 75);
+    if (Number.isFinite(enemyCastleDistance)) value += Math.max(0, 7 - enemyCastleDistance) * (castleReserveGone() ? 145 : 55);
+    if (Number.isFinite(ownCastleDistance)) value += Math.max(0, 4 - ownCastleDistance) * 55;
+    value += adjacent.vulnerableEnemy * (castleReserveGone() ? 720 : 260);
+    value += adjacent.enemy * (castleReserveGone() ? 220 : 90);
+    value += adjacent.own * 120;
+  }
+  return value;
+}
+
+function moveAttackBonus(action, owner) {
+  if (action.type !== "move") return 0;
+  const knight = state.knights.find((item) => item.id === action.knightId);
+  if (!knight) return 0;
+  const fromEnemyDistance = nearestCastleDistance(knight.vertex, enemyOf(owner));
+  const toEnemyDistance = nearestCastleDistance(action.to, enemyOf(owner));
+  const fromHome = capitalCell(owner);
+  const fromPoint = vertices.get(knight.vertex);
+  const toPoint = vertices.get(action.to);
+  const homeProgress = fromHome
+    ? (Math.hypot(toPoint.x - fromHome.x, toPoint.y - fromHome.y) - Math.hypot(fromPoint.x - fromHome.x, fromPoint.y - fromHome.y)) / HEX_SIZE
+    : 0;
+  const adjacent = adjacentWallCounts(action.to, owner);
+  let value = 0;
+  if (Number.isFinite(fromEnemyDistance) && Number.isFinite(toEnemyDistance)) value += (fromEnemyDistance - toEnemyDistance) * (castleReserveGone() ? 460 : 160);
+  value += Math.max(0, homeProgress) * (castleReserveGone() ? 170 : 105);
+  value += adjacent.vulnerableEnemy * (castleReserveGone() ? 1050 : 340);
+  value += adjacent.enemy * (castleReserveGone() ? 300 : 110);
+  value += adjacent.own * 120;
+  return value;
+}
+
+function buildExpansionBonus(edgeKeyValue, owner) {
+  if (castleReserveGone()) return 0;
+  const home = capitalCell(owner);
+  if (!home) return 0;
+  const edge = edges.get(edgeKeyValue);
+  let value = 0;
+  let supportsCastlePlan = false;
+
+  for (const cellKeyValue of edge?.cells || []) {
+    const cell = cellByKey(cellKeyValue);
+    if (!cell) continue;
+    const distanceFromCapital = hexDistance(cell, home);
+    const ownWalls = wallCountForCell(cell, owner);
+
+    if (distanceFromCapital <= 1) value -= 620;
+    if (!state.castles[cellKeyValue] && hasCastleSpacing(cell)) {
+      supportsCastlePlan = true;
+      value += Math.min(distanceFromCapital, 4) * 210;
+      value += ownWalls * 260;
+      if (distanceFromCapital >= 2) value += 520;
+      if (distanceFromCapital >= 3) value += 260;
+    }
+  }
+
+  return supportsCastlePlan ? value : value - 260;
+}
+
+function actionAttackBonus(action, owner) {
+  if (action.type === "buildWall") {
+    let value = castleReserveGone() ? -760 : -90;
+    const edge = edges.get(action.edge);
+    for (const cellKeyValue of edge?.cells || []) {
+      const cell = cellByKey(cellKeyValue);
+      const castle = state.castles[cellKeyValue];
+      const ownWalls = wallCountForCell(cell, owner);
+      if (castle?.owner === enemyOf(owner) && !castle.capital) {
+        if (ownWalls >= 4) value += castleReserveGone() ? 15000 : 2500;
+        else if (ownWalls === 3) value += castleReserveGone() ? 8500 : 1200;
+        else if (ownWalls === 2) value += castleReserveGone() ? 3600 : 460;
+        else value += castleReserveGone() ? 1200 : 90;
+      } else if (!castle && hasCastleSpacing(cell) && !castleReserveGone()) {
+        if (ownWalls >= 4) value += 3600;
+        else if (ownWalls === 3) value += 1900;
+        else if (ownWalls === 2) value += 760;
+        else value += 220;
+      }
+    }
+    value += buildExpansionBonus(action.edge, owner);
+    return value;
+  }
+
+  if (action.type === "destroyWall") {
+    let value = 900;
+    const edge = edges.get(action.edge);
+    for (const cellKeyValue of edge?.cells || []) {
+      const cell = cellByKey(cellKeyValue);
+      const castle = state.castles[cellKeyValue];
+      if (castle?.owner === enemyOf(owner) && !castle.capital) value += (castleReserveGone() ? 1700 : 600) + wallCountForCell(cell, owner) * (castleReserveGone() ? 560 : 180);
+      else if (!castle && hasCastleSpacing(cell) && !castleReserveGone()) value += wallCountForCell(cell, owner) * 180;
+    }
+    return value;
+  }
+
+  return 0;
+}
+
+function knightMobilityScore(owner) {
+  return state.knights
+    .filter((knight) => knight.owner === owner)
+    .reduce((total, knight) => total + legalMoveTargets(knight).size, 0);
+}
+
+function wallPresenceScore(owner) {
+  return Object.values(state.walls).filter((wallOwner) => wallOwner === owner).length;
+}
+
+function boardScoreFor(owner) {
+  const enemy = enemyOf(owner);
+  return (
+    score(owner) * 1800 -
+    score(enemy) * 1900 +
+    captureThreatScore(owner) * (castleReserveGone() ? 2.45 : 0.55) -
+    captureThreatScore(enemy) * (castleReserveGone() ? 1.45 : 0.85) +
+    castleThreatScore(owner) * (castleReserveGone() ? 0.08 : 1.65) -
+    castleThreatScore(enemy) * 1.05 +
+    knightDevelopmentScore(owner) -
+    knightDevelopmentScore(enemy) * 0.65 +
+    knightMobilityScore(owner) * 8 -
+    knightMobilityScore(enemy) * 10 +
+    wallPresenceScore(owner) * 2 -
+    wallPresenceScore(enemy) * 4 +
+    state.reserves[owner] * 2
+  );
+}
+
+function immediateActionBonus(action, owner, beforeCastles, beforeEnemyCastles) {
+  let value = 0;
+  if (state.winner === owner) value += 100000;
+  if (state.winner === enemyOf(owner)) value -= 100000;
+  if (score(owner) > beforeCastles) value += 8500;
+  if (score(enemyOf(owner)) < beforeEnemyCastles) value += 9000;
+  if (action.type === "buildCastle") value += 7200;
+  if (action.type === "destroyWall") value += 1050;
+  if (action.type === "buildWall") value += 20;
+  if (action.type === "move") value += 35;
+  value += actionAttackBonus(action, owner);
+  value += moveAttackBonus(action, owner);
+  return value;
+}
+
+function evaluateActionInPlace(action, owner) {
+  const beforeCastles = score(owner);
+  const beforeEnemyCastles = score(enemyOf(owner));
+  if (!mutateAction(action, owner, { log: false })) return -Infinity;
+  finishTurn({ render: false, publish: false, animate: false, log: false });
+  return boardScoreFor(owner) + immediateActionBonus(action, owner, beforeCastles, beforeEnemyCastles);
+}
+
+function bestImmediateReplyScore(owner, limit = 36) {
+  const actions = legalActionsForPlayer(owner);
+  if (!actions.length) return 0;
+  const ordered = actions.sort((a, b) => actionPriority(b) - actionPriority(a)).slice(0, limit);
+  const replyBaseState = cloneState(state);
+  let best = -Infinity;
+  for (const action of ordered) {
+    state = cloneState(replyBaseState);
+    selectedKnight = null;
+    hover = null;
+    pendingTouchEdge = null;
+    pendingTouchCell = null;
+    const value = evaluateActionInPlace(action, owner);
+    if (value > best) best = value;
+  }
+  state = replyBaseState;
+  selectedKnight = null;
+  hover = null;
+  pendingTouchEdge = null;
+  pendingTouchCell = null;
+  return best;
+}
+
+function actionPriority(action) {
+  if (action.type === "buildCastle") return 5;
+  if (action.type === "destroyWall") return 4;
+  if (action.type === "buildWall") return castleReserveGone() ? 3 : 4;
+  if (action.type === "move") return castleReserveGone() ? 3 : 1;
+  return 1;
+}
+
+function simulatedActionScore(action, owner) {
+  const previousState = state;
+  const previousSelected = selectedKnight;
+  const previousHover = hover;
+  const previousPendingEdge = pendingTouchEdge;
+  const previousPendingCell = pendingTouchCell;
+  state = cloneState(previousState);
+  selectedKnight = null;
+  hover = null;
+  pendingTouchEdge = null;
+  pendingTouchCell = null;
+
+  const immediate = evaluateActionInPlace(action, owner);
+  if (immediate === -Infinity) {
+    state = previousState;
+    selectedKnight = previousSelected;
+    hover = previousHover;
+    pendingTouchEdge = previousPendingEdge;
+    pendingTouchCell = previousPendingCell;
+    return -Infinity;
+  }
+
+  let value = immediate;
+  if (!state.winner) {
+    const reply = bestImmediateReplyScore(enemyOf(owner));
+    value -= Math.max(0, reply) * 0.68;
+  }
+
+  state = previousState;
+  selectedKnight = previousSelected;
+  hover = previousHover;
+  pendingTouchEdge = previousPendingEdge;
+  pendingTouchCell = previousPendingCell;
+  return value;
+}
+
+function buildPhaseActions(actions, owner) {
+  if (castleReserveGone()) return actions;
+  const castleActions = actions.filter((action) => action.type === "buildCastle");
+  if (castleActions.length) return castleActions;
+  const usefulWallActions = actions.filter((action) => action.type === "buildWall" && buildExpansionBonus(action.edge, owner) > 0);
+  if (usefulWallActions.length) return usefulWallActions;
+  const moveActions = actions.filter((action) => action.type === "move");
+  if (moveActions.length) return moveActions;
+  return actions;
+}
+
+function chooseAiAction(owner) {
+  const actions = buildPhaseActions(legalActionsForPlayer(owner), owner);
+  if (!actions.length) return null;
+  let best = null;
+  let bestScore = -Infinity;
+  for (const action of actions) {
+    const value = simulatedActionScore(action, owner) + Math.random() * 0.001;
+    if (value > bestScore) {
+      best = action;
+      bestScore = value;
+    }
+  }
+  return best;
+}
+
+function scheduleAiTurn() {
+  if (!aiGame.enabled || aiGame.thinking || onlineGame.joined || state.winner || state.turn !== aiGame.player) return;
+  aiGame.thinking = true;
+  updateUi();
+  window.setTimeout(() => {
+    if (!aiGame.enabled || onlineGame.joined || state.winner || state.turn !== aiGame.player) {
+      aiGame.thinking = false;
+      updateUi();
+      return;
+    }
+    const action = chooseAiAction(aiGame.player);
+    aiGame.thinking = false;
+    if (action && applyAction(action, { publish: false })) return;
+    addLog(`${PLAYERS[aiGame.player].name} AI has no legal action.`);
+    finishTurn({ publish: false });
+  }, 450);
+}
+
 function returnKnightHome(knight, fromVertex) {
   const capitalKey = Object.entries(state.castles).find(([, castle]) => castle.owner === knight.owner && castle.capital)[0];
   const capital = cellByKey(capitalKey);
@@ -450,23 +882,25 @@ function animateCaptureMarkers() {
   });
 }
 
-function resolveCaptures(actor) {
+function resolveCaptures(actor, options = {}) {
+  const animate = options.animate ?? true;
+  const writeLog = options.log ?? true;
   const defender = enemyOf(actor);
   const captured = state.knights.filter((knight) => knight.owner === defender && legalMoveTargets(knight).size === 0);
   for (const knight of captured) {
     const capturedFrom = knight.vertex;
-    addCaptureMarker(knight.owner, capturedFrom, "capture");
+    if (animate) addCaptureMarker(knight.owner, capturedFrom, "capture");
     const returnedTo = returnKnightHome(knight, capturedFrom);
-    addCaptureMarker(knight.owner, returnedTo, "respawn", 360);
+    if (animate) addCaptureMarker(knight.owner, returnedTo, "respawn", 360);
   }
-  if (captured.length) addLog(`${PLAYERS[actor].name} captured ${captured.length} knight${captured.length === 1 ? "" : "s"}.`);
+  if (captured.length && writeLog) addLog(`${PLAYERS[actor].name} captured ${captured.length} knight${captured.length === 1 ? "" : "s"}.`);
 
   for (const [key, castle] of Object.entries(state.castles)) {
     if (castle.capital || castle.owner !== defender) continue;
     const cell = cellByKey(key);
     if (wallCountForCell(cell, actor) >= 4) {
       castle.owner = actor;
-      addLog(`${PLAYERS[actor].name} captured a castle.`);
+      if (writeLog) addLog(`${PLAYERS[actor].name} captured a castle.`);
     }
   }
 }
@@ -479,22 +913,29 @@ function hexDistance(a, b) {
   return (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(-a.q - a.r + b.q + b.r)) / 2;
 }
 
-function finishTurn() {
+function finishTurn(options = {}) {
+  const render = options.render ?? true;
+  const publish = options.publish ?? true;
+  const animate = options.animate ?? true;
+  const writeLog = options.log ?? true;
   const actor = currentPlayer();
   selectedKnight = null;
   pendingTouchEdge = null;
   pendingTouchCell = null;
   hover = null;
-  resolveCaptures(actor);
+  resolveCaptures(actor, { animate, log: writeLog });
   if (score(actor) >= WIN_CASTLE_COUNT) {
     state.winner = actor;
-    addLog(`${PLAYERS[actor].name} controls ${WIN_CASTLE_COUNT} castles.`);
+    if (writeLog) addLog(`${PLAYERS[actor].name} controls ${WIN_CASTLE_COUNT} castles.`);
   } else {
     state.turn = enemyOf(actor);
   }
-  updateUi();
-  draw();
-  publishOnlineState();
+  if (render) {
+    updateUi();
+    draw();
+  }
+  if (publish) publishOnlineState();
+  if (render) scheduleAiTurn();
 }
 
 function scheduleResize() {
@@ -1035,6 +1476,8 @@ function openOnlineColorModal() {
 
 async function createOnlineGame(player = preferredOnlinePlayer) {
   preferredOnlinePlayer = player === "B" ? "B" : "W";
+  aiGame.enabled = false;
+  aiGame.thinking = false;
   leaveOnlineGame();
   prepareFreshGameState();
   updateUi();
@@ -1059,6 +1502,8 @@ async function createOnlineGame(player = preferredOnlinePlayer) {
 }
 
 async function joinOnlineGame(roomId) {
+  aiGame.enabled = false;
+  aiGame.thinking = false;
   try {
     const socket = await connectOnlineSocket();
     socket.emit("joinGame", { roomId }, (response) => {
@@ -1201,10 +1646,11 @@ function updateUi() {
   els.whiteHud.classList.toggle("active", !state.winner && state.turn === "W");
   els.blackHud.classList.toggle("active", !state.winner && state.turn === "B");
   els.online?.classList.toggle("active", onlineGame.joined);
-  els.reset?.classList.toggle("active", !onlineGame.joined);
+  els.reset?.classList.toggle("active", !onlineGame.joined && !aiGame.enabled);
+  els.ai?.classList.toggle("active", aiGame.enabled && !onlineGame.joined);
   els.undoButtons.forEach((button) => {
     button.hidden = onlineGame.joined;
-    button.disabled = onlineGame.joined;
+    button.disabled = onlineGame.joined || aiGame.thinking;
     button.title = onlineGame.joined ? "Undo is unavailable during online games" : "Undo last action";
   });
   updateOnlineStatus();
@@ -1249,10 +1695,29 @@ function prepareFreshGameState() {
 }
 
 function resetGame() {
+  aiGame.enabled = false;
+  aiGame.thinking = false;
   leaveOnlineGame();
   prepareFreshGameState();
   updateUi();
   resizeCanvas();
+}
+
+function openAiColorModal() {
+  if (els.aiColorModal) els.aiColorModal.hidden = false;
+}
+
+function startAiGame(humanPlayer = "W") {
+  const human = humanPlayer === "B" ? "B" : "W";
+  aiGame.enabled = true;
+  aiGame.player = enemyOf(human);
+  aiGame.thinking = false;
+  leaveOnlineGame();
+  prepareFreshGameState();
+  addLog(`${PLAYERS[human].name} faces the ${PLAYERS[aiGame.player].name} AI.`);
+  updateUi();
+  resizeCanvas();
+  scheduleAiTurn();
 }
 
 function undoLastAction() {
@@ -1271,6 +1736,17 @@ function undoLastAction() {
 }
 
 els.undoButtons.forEach((button) => button.addEventListener("click", undoLastAction));
+els.ai?.addEventListener("click", openAiColorModal);
+els.aiColorButtons?.forEach((button) => {
+  button.addEventListener("click", () => {
+    const humanPlayer = button.dataset.aiColor === "B" ? "B" : "W";
+    if (els.aiColorModal) els.aiColorModal.hidden = true;
+    startAiGame(humanPlayer);
+  });
+});
+els.cancelAiColor?.addEventListener("click", () => {
+  els.aiColorModal.hidden = true;
+});
 els.onlineColorButtons?.forEach((button) => {
   button.addEventListener("click", () => {
     const selectedPlayer = button.dataset.onlineColor === "B" ? "B" : "W";
