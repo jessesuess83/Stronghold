@@ -23,7 +23,8 @@ body {
 }
 
 body {
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: 100svh;
   margin: 0;
   color: var(--ink);
   background:
@@ -41,7 +42,8 @@ button {
 .app {
   display: grid;
   grid-template-columns: 1fr;
-  min-height: 100dvh;
+  min-height: 100vh;
+  min-height: 100svh;
   padding: clamp(4px, 0.7vw, 8px);
 }
 
@@ -49,14 +51,16 @@ button {
   display: flex;
   width: 100%;
   min-width: 0;
-  min-height: calc(100dvh - clamp(8px, 1.4vw, 16px));
+  min-height: calc(100vh - clamp(8px, 1.4vw, 16px));
+  min-height: calc(100svh - clamp(8px, 1.4vw, 16px));
 }
 
 .game-shell {
   position: relative;
   flex: 1;
   width: 100%;
-  height: calc(100dvh - clamp(8px, 1.4vw, 16px));
+  height: calc(100vh - clamp(8px, 1.4vw, 16px));
+  height: calc(100svh - clamp(8px, 1.4vw, 16px));
   min-width: 0;
   min-height: 560px;
   border: 1px solid rgba(32, 36, 42, 0.08);
@@ -179,8 +183,8 @@ button {
 }
 
 .player-hud {
-  width: clamp(148px, 19vw, 220px);
-  padding: clamp(9px, 1vw, 13px) clamp(10px, 1.1vw, 14px);
+  width: clamp(128px, 15vw, 174px);
+  padding: clamp(8px, 0.9vw, 11px) clamp(9px, 1vw, 12px);
   border: 1px solid rgba(32, 36, 42, 0.22);
   border-radius: 8px;
   background: rgba(255, 250, 240, 0.78);
@@ -215,7 +219,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: clamp(6px, 0.8vw, 10px);
 }
 
 .hud-heading span {
@@ -374,7 +378,7 @@ button {
   }
 
   .player-hud {
-    width: clamp(132px, 36vw, 168px);
+    width: clamp(116px, 31vw, 148px);
   }
 
   .secondary {
@@ -417,14 +421,43 @@ button {
   }
 }
 
-@media (max-height: 650px) and (orientation: landscape) {
+@media (max-height: 900px) and (orientation: landscape) {
   .game-shell {
-    height: calc(100dvh - 8px);
-    min-height: 480px;
+    height: calc(100vh - 8px);
+    height: calc(100svh - 8px);
+    min-height: 520px;
+  }
+
+  .board-brand {
+    gap: 7px;
   }
 
   .game-title {
-    font-size: clamp(1.75rem, 4vw, 2.6rem);
+    font-size: clamp(2.1rem, 3.8vw, 3rem);
+  }
+
+  .player-hud {
+    width: clamp(126px, 13vw, 158px);
+    padding: 8px 10px;
+  }
+
+  .hud-heading span {
+    font-size: clamp(1rem, 1.35vw, 1.25rem);
+  }
+
+  .hud-stats {
+    margin-top: 7px;
+    font-size: clamp(0.78rem, 1vw, 0.9rem);
+  }
+
+  .hud-stats strong {
+    font-size: clamp(1rem, 1.35vw, 1.25rem);
+  }
+
+  .secondary {
+    min-height: 34px;
+    padding: 0 11px;
+    font-size: 0.9rem;
   }
 
   .castle-token {
