@@ -9,39 +9,58 @@
   <body>
     <main class="app">
       <section class="board-zone" aria-label="Stronghold board area">
-        <header class="board-header">
-          <h1 class="game-title">Stronghold</h1>
+        <div class="game-shell" aria-label="Stronghold board">
+          <canvas id="board" width="980" height="820"></canvas>
+
+          <div class="board-brand" aria-label="Game title and help">
+            <h1 class="game-title">Stronghold</h1>
+            <div class="title-actions">
+              <button id="howToBtn" class="secondary how-to-button" title="How to play">How to Play</button>
+              <button id="resetBtn" class="secondary" title="New game">New Game</button>
+            </div>
+          </div>
+
           <span class="sr-only" id="turnTitle">White Turn</span>
           <span class="sr-only" id="turnChip">W</span>
           <span class="sr-only" id="winner">-</span>
           <span class="sr-only" id="castleReserve">6</span>
           <span class="sr-only" id="whiteWalls">40</span>
           <span class="sr-only" id="blackWalls">40</span>
-        </header>
-        <div class="game-shell" aria-label="Stronghold board">
-          <canvas id="board" width="980" height="820"></canvas>
 
-          <div class="player-hud white-hud" id="whiteHud" aria-label="White player data">
-            <div class="hud-heading">
-              <span>White</span>
-            </div>
-            <div class="hud-stats">
-              <span>Castles <strong id="whiteScore">0</strong></span>
-            </div>
+          <div class="castle-reserve white-castle-reserve" aria-label="White castle reserve">
+            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="W" /></span>
+            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="W" /></span>
+            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="W" /></span>
           </div>
 
-          <div class="player-hud black-hud" id="blackHud" aria-label="Black player data">
-            <div class="hud-heading">
-              <span>Black</span>
-            </div>
-            <div class="hud-stats">
-              <span>Castles <strong id="blackScore">0</strong></span>
-            </div>
+          <div class="castle-reserve black-castle-reserve" aria-label="Black castle reserve">
+            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="B" /></span>
+            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="B" /></span>
+            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="B" /></span>
           </div>
 
-          <div class="board-actions" aria-label="Board controls">
-            <button id="undoBtn" class="secondary" title="Undo last action">↶ Undo</button>
-            <button id="resetBtn" class="secondary" title="New game">New Game</button>
+          <div class="player-control white-control">
+            <div class="player-hud white-hud" id="whiteHud" aria-label="White player data">
+              <div class="hud-heading">
+                <span>White</span>
+              </div>
+              <div class="hud-stats">
+                <span>Castles <strong id="whiteScore">0</strong></span>
+              </div>
+            </div>
+            <button class="secondary undo-button" data-undo title="Undo last action">↺ Undo</button>
+          </div>
+
+          <div class="player-control black-control">
+            <button class="secondary undo-button" data-undo title="Undo last action">↺ Undo</button>
+            <div class="player-hud black-hud" id="blackHud" aria-label="Black player data">
+              <div class="hud-heading">
+                <span>Black</span>
+              </div>
+              <div class="hud-stats">
+                <span>Castles <strong id="blackScore">0</strong></span>
+              </div>
+            </div>
           </div>
 
           <div class="sr-only" id="log" aria-live="polite"></div>
@@ -50,22 +69,77 @@
     </main>
 
     <div class="win-modal" id="winModal" hidden>
-      <div class="win-card" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+      <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="winTitle">
         <p class="eyebrow">Game Over</p>
         <h2 id="winTitle">White Wins</h2>
         <button id="winResetBtn" class="secondary" title="Close winner message">OK</button>
       </div>
     </div>
 
-
     <div class="confirm-modal" id="confirmResetModal" hidden>
-      <div class="win-card" role="dialog" aria-modal="true" aria-labelledby="confirmResetTitle">
+      <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="confirmResetTitle">
         <p class="eyebrow">New Game</p>
         <h2 id="confirmResetTitle">Are you sure?</h2>
         <div class="confirm-actions">
           <button id="cancelResetBtn" class="secondary" title="Keep current game">Cancel</button>
           <button id="confirmResetBtn" class="secondary danger" title="Start a new game">New Game</button>
         </div>
+      </div>
+    </div>
+
+    <div class="how-to-modal" id="howToModal" hidden>
+      <div class="dialog-card rules-card" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
+        <button id="closeHowToBtn" class="secondary close-button" title="Close how to play">OK</button>
+        <h2 id="howToTitle">How to Play</h2>
+
+        <h3>Objective</h3>
+        <p>Control <strong>4 Castles</strong> at the end of your turn to win the game.</p>
+
+        <h3>Your Turn</h3>
+        <p>Choose <strong>one</strong> action.</p>
+
+        <h4>Move a Knight</h4>
+        <p>Move one Knight up to <strong>5 intersections</strong>.</p>
+        <p>Knights:</p>
+        <ul>
+          <li>may cross your own Walls.</li>
+          <li>may not cross enemy Walls.</li>
+          <li>may not move through enemy Knights.</li>
+          <li>must end on an empty intersection.</li>
+        </ul>
+
+        <h4>Build a Wall</h4>
+        <p>Place one Wall on an empty edge.</p>
+        <p>A Wall must:</p>
+        <ul>
+          <li>connect to one of your Knights or Walls.</li>
+          <li>not touch an enemy Knight or enemy Wall.</li>
+        </ul>
+
+        <h4>Destroy a Wall</h4>
+        <p>A Knight may destroy one adjacent enemy Wall.</p>
+        <p>Destroyed Walls return to their owner’s supply.</p>
+        <p><strong>Knights protect adjacent Walls. Protected Walls cannot be destroyed.</strong></p>
+
+        <h4>Build a Castle</h4>
+        <p>Place a Castle on an empty hex if:</p>
+        <ul>
+          <li>its six sides include <strong>4 connected Walls</strong> of your color.</li>
+          <li>it is at least <strong>1 hex away</strong> from every Capital and Castle.</li>
+        </ul>
+
+        <h3>Capturing Knights</h3>
+        <p>A Knight is captured if it has <strong>no legal move</strong> because it is blocked by enemy Knights and/or Walls.</p>
+        <p>Captured Knights immediately return to the furthest empty intersection adjacent to their Capital.</p>
+
+        <h3>Capturing Castles</h3>
+        <p>If the <strong>4 connected Walls</strong> surrounding an enemy Castle become your Walls, capture that Castle by flipping it to your color.</p>
+
+        <h3>Capitals</h3>
+        <ul>
+          <li>Capitals are permanent and cannot be captured.</li>
+          <li>Knights always return to their own Capital when captured.</li>
+        </ul>
       </div>
     </div>
 

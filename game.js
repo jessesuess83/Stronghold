@@ -7,10 +7,14 @@ const HEX_SIZE = 62;
 const KNIGHT_MOVE_LIMIT = 5;
 const KNIGHT_HIT_RADIUS = 20;
 const EDGE_HIT_RADIUS = 7;
+const TOUCH_EDGE_HIT_RADIUS = 12;
+const TOUCH_CONFIRM_EDGE_HIT_RADIUS = 16;
 const CASTLE_HIT_RADIUS = 30;
-const CASTLE_TILE_RESERVE = 6;
+const TOUCH_CASTLE_HIT_RADIUS = 42;
+const TOUCH_CONFIRM_CASTLE_HIT_RADIUS = 50;
+const CASTLE_TILE_RESERVE = 3;
 const WIN_CASTLE_COUNT = 4;
-const BOARD_SCALE = 0.95;
+const BOARD_SCALE = 0.99;
 const PLAYERS = {
   W: { name: "White", wallColor: "#f8f4e8", pieceColor: "#fffdf7", text: "#1f252c" },
   B: { name: "Black", wallColor: "#1f252c", pieceColor: "#1f252c", text: "#fffaf0" },
@@ -20,6 +24,8 @@ const ASSET_PATHS = {
   knightB: "assets/knight-black.png",
   castleW: "assets/castle-white.png",
   castleB: "assets/castle-black.png",
+  capitalDark: "assets/capital-dark.png",
+  capitalLight: "assets/capital-light.png",
 };
 
 const els = {
@@ -30,18 +36,22 @@ const els = {
   whiteWalls: document.getElementById("whiteWalls"),
   blackWalls: document.getElementById("blackWalls"),
   castleReserve: document.getElementById("castleReserve"),
+  castleTokens: document.querySelectorAll("[data-castle-token]"),
   winner: document.getElementById("winner"),
   whiteHud: document.getElementById("whiteHud"),
   blackHud: document.getElementById("blackHud"),
   winModal: document.getElementById("winModal"),
   winTitle: document.getElementById("winTitle"),
   confirmResetModal: document.getElementById("confirmResetModal"),
+  howToModal: document.getElementById("howToModal"),
   log: document.getElementById("log"),
-  undo: document.getElementById("undoBtn"),
+  undoButtons: document.querySelectorAll("[data-undo]"),
   reset: document.getElementById("resetBtn"),
   winReset: document.getElementById("winResetBtn"),
   cancelReset: document.getElementById("cancelResetBtn"),
   confirmReset: document.getElementById("confirmResetBtn"),
+  howTo: document.getElementById("howToBtn"),
+  closeHowTo: document.getElementById("closeHowToBtn"),
 };
 
 let cells = [];
@@ -52,6 +62,9 @@ let state;
 let selectedKnight = null;
 let hover = null;
 let pendingTouchEdge = null;
+let pendingTouchCell = null;
+let captureMarkers = [];
+let captureAnimationFrame = null;
 let history = [];
 let assetsReady = false;
 let resizeFrame = null;
@@ -152,7 +165,7 @@ function createInitialState() {
       ...whiteStart.map((v, i) => ({ id: `W${i + 1}`, owner: "W", vertex: v })),
       ...blackStart.map((v, i) => ({ id: `B${i + 1}`, owner: "B", vertex: v })),
     ],
-    reserves: { W: 40, B: 40, castles: CASTLE_TILE_RESERVE },
+    reserves: { W: 40, B: 40, castles: { W: CASTLE_TILE_RESERVE, B: CASTLE_TILE_RESERVE } },
     log: ["White begins."],
   };
 }
@@ -262,7 +275,7 @@ function castleBuildReason(cellKeyValue, owner) {
   const cell = cellByKey(cellKeyValue);
   if (!cell) return "Choose a hex center.";
   if (state.castles[cellKeyValue]) return "That hex already has a castle.";
-  if (state.reserves.castles <= 0) return "No castle tiles remain.";
+  if (state.reserves.castles[owner] <= 0) return `${PLAYERS[owner].name} has no castle tiles remaining.`;
   if (connectedWallCountForCell(cell, owner) < 4) return "Castle needs 4 connected walls around that hex.";
   if (!hasCastleSpacing(cell)) return "Castle must be at least one empty hex from any capital or castle.";
   return "";
@@ -371,23 +384,56 @@ function buildCastle(key) {
   }
   pushHistory();
   state.castles[key] = { owner, capital: false };
-  state.reserves.castles -= 1;
+  state.reserves.castles[owner] -= 1;
   addLog(`${PLAYERS[owner].name} raised a castle.`);
   finishTurn();
   return true;
 }
 
-function returnKnightHome(knight) {
+function returnKnightHome(knight, fromVertex) {
   const capitalKey = Object.entries(state.castles).find(([, castle]) => castle.owner === knight.owner && castle.capital)[0];
   const capital = cellByKey(capitalKey);
-  const open = capital.vertices.find((key) => !knightAt(key));
-  knight.vertex = open || capital.vertices[0];
+  const from = vertices.get(fromVertex);
+  let furthestOpen = null;
+  let furthestDistance = -1;
+
+  for (const key of capital.vertices) {
+    if (knightAt(key)) continue;
+    const point = vertices.get(key);
+    const distance = (point.x - from.x) ** 2 + (point.y - from.y) ** 2;
+    if (distance > furthestDistance) {
+      furthestDistance = distance;
+      furthestOpen = key;
+    }
+  }
+
+  knight.vertex = furthestOpen || capital.vertices[0];
+  return knight.vertex;
+}
+
+function addCaptureMarker(owner, vertex, kind = "capture", delay = 0) {
+  captureMarkers.push({ owner, vertex, kind, startedAt: performance.now() + delay });
+  if (!captureAnimationFrame) animateCaptureMarkers();
+}
+
+function animateCaptureMarkers() {
+  captureAnimationFrame = requestAnimationFrame(() => {
+    captureMarkers = captureMarkers.filter((marker) => performance.now() - marker.startedAt < 1200);
+    draw();
+    if (captureMarkers.length) animateCaptureMarkers();
+    else captureAnimationFrame = null;
+  });
 }
 
 function resolveCaptures(actor) {
   const defender = enemyOf(actor);
   const captured = state.knights.filter((knight) => knight.owner === defender && legalMoveTargets(knight).size === 0);
-  for (const knight of captured) returnKnightHome(knight);
+  for (const knight of captured) {
+    const capturedFrom = knight.vertex;
+    addCaptureMarker(knight.owner, capturedFrom, "capture");
+    const returnedTo = returnKnightHome(knight, capturedFrom);
+    addCaptureMarker(knight.owner, returnedTo, "respawn", 360);
+  }
   if (captured.length) addLog(`${PLAYERS[actor].name} captured ${captured.length} knight${captured.length === 1 ? "" : "s"}.`);
 
   for (const [key, castle] of Object.entries(state.castles)) {
@@ -412,6 +458,7 @@ function finishTurn() {
   const actor = currentPlayer();
   selectedKnight = null;
   pendingTouchEdge = null;
+  pendingTouchCell = null;
   hover = null;
   resolveCaptures(actor);
   if (score(actor) >= WIN_CASTLE_COUNT) {
@@ -424,19 +471,37 @@ function finishTurn() {
   draw();
 }
 
+function scheduleResize() {
+  if (resizeFrame) cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(() => {
+    resizeFrame = null;
+    resizeCanvas();
+  });
+}
+
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) {
+    if (resizeFrame) cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = null;
+      resizeCanvas();
+    });
+    return;
+  }
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.max(640, Math.floor(rect.width * dpr));
   canvas.height = Math.max(520, Math.floor(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
   const xs = cells.map((cell) => cell.x);
   const ys = cells.map((cell) => cell.y);
-  const minX = Math.min(...xs) - HEX_SIZE * 0.82;
-  const maxX = Math.max(...xs) + HEX_SIZE * 0.82;
-  const minY = Math.min(...ys) - HEX_SIZE * 1.35;
-  const maxY = Math.max(...ys) + HEX_SIZE * 1.35;
+  const minX = Math.min(...xs) - HEX_SIZE * 0.95;
+  const maxX = Math.max(...xs) + HEX_SIZE * 0.95;
+  const minY = Math.min(...ys) - HEX_SIZE * 1.28;
+  const maxY = Math.max(...ys) + HEX_SIZE * 1.28;
   const cssW = rect.width;
   const cssH = rect.height;
   layout.width = cssW;
@@ -512,21 +577,25 @@ function drawBreakPreview(key) {
   ctx.stroke();
 }
 
-function drawImageIcon(image, x, y, size, shape) {
+function drawImageIcon(image, x, y, size, shape, clipSize = size) {
   ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   if (shape === "hex") {
     ctx.beginPath();
     for (let i = 0; i < 6; i += 1) {
       const angle = ((30 + i * 60) * Math.PI) / 180;
-      const px = x + (size / 2) * Math.cos(angle);
-      const py = y + (size / 2) * Math.sin(angle);
+      const px = x + (clipSize / 2) * Math.cos(angle);
+      const py = y + (clipSize / 2) * Math.sin(angle);
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
     ctx.closePath();
     ctx.clip();
   }
+
   ctx.drawImage(image, x - size / 2, y - size / 2, size, size);
+
   ctx.restore();
 }
 
@@ -567,17 +636,21 @@ function drawCastleBacking(x, y, size, owner) {
 }
 
 function drawCastle(cell, castle) {
+  if (!assetsReady) return;
   const center = toScreen(cell);
-  const size = castle.capital ? 70 : 60;
-  const castleImage = assetImages[castle.owner === "W" ? "castleB" : "castleW"];
-  if (assetsReady && castleImage?.complete) {
-    drawCastleBacking(center.x, center.y, size + 5, castle.owner);
-    drawImageIcon(castleImage, center.x, center.y, size, "hex");
+  const size = castle.capital ? 95 : 83;
+  const borderSize = castle.capital ? HEX_SIZE * 2 : size;
+  const castleImage = castle.capital
+    ? assetImages[castle.owner === "W" ? "capitalDark" : "capitalLight"]
+    : assetImages[castle.owner === "W" ? "castleB" : "castleW"];
+  if (castleImage?.complete && castleImage.naturalWidth > 0) {
+    drawCastleBacking(center.x, center.y, borderSize, castle.owner);
+    drawImageIcon(castleImage, center.x, center.y, size, castle.capital ? "none" : "hex", borderSize);
     ctx.beginPath();
     for (let i = 0; i < 6; i += 1) {
       const angle = ((30 + i * 60) * Math.PI) / 180;
-      const px = center.x + (size / 2) * Math.cos(angle);
-      const py = center.y + (size / 2) * Math.sin(angle);
+      const px = center.x + (borderSize / 2) * Math.cos(angle);
+      const py = center.y + (borderSize / 2) * Math.sin(angle);
       if (i === 0) ctx.moveTo(px, py);
       else ctx.lineTo(px, py);
     }
@@ -585,11 +658,6 @@ function drawCastle(cell, castle) {
     ctx.strokeStyle = pieceContrastColor(castle.owner);
     ctx.lineWidth = 1.5;
     ctx.stroke();
-    if (castle.capital) {
-      ctx.strokeStyle = "#d49a24";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
     return;
   }
   ctx.save();
@@ -618,17 +686,18 @@ function drawCastle(cell, castle) {
 }
 
 function drawKnight(knight) {
+  if (!assetsReady) return;
   const point = toScreen(vertices.get(knight.vertex));
   const selected = selectedKnight === knight.id;
   const knightImage = assetImages[knight.owner === "W" ? "knightB" : "knightW"];
-  if (assetsReady && knightImage?.complete) {
-    drawKnightBacking(point.x, point.y, selected ? 35 : 31, knight.owner);
+  if (knightImage?.complete && knightImage.naturalWidth > 0) {
+    drawKnightBacking(point.x, point.y, selected ? 49 : 43, knight.owner);
     if (selected) {
       ctx.beginPath();
       for (let i = 0; i < 6; i += 1) {
         const angle = ((30 + i * 60) * Math.PI) / 180;
-        const px = point.x + 14 * Math.cos(angle);
-        const py = point.y + 14 * Math.sin(angle);
+        const px = point.x + 27 * Math.cos(angle);
+        const py = point.y + 27 * Math.sin(angle);
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
@@ -637,7 +706,7 @@ function drawKnight(knight) {
       ctx.lineWidth = 2;
       ctx.stroke();
     }
-    drawImageIcon(knightImage, point.x, point.y, selected ? 34 : 30, "none");
+    drawImageIcon(knightImage, point.x, point.y, selected ? 46 : 41, "none");
   } else {
     ctx.beginPath();
     ctx.arc(point.x, point.y, selected ? 16 : 13, 0, Math.PI * 2);
@@ -663,6 +732,34 @@ function drawTargets() {
     ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(108, 141, 85, 0.72)";
     ctx.fill();
+  }
+}
+
+function drawCaptureMarkers() {
+  const now = performance.now();
+  for (const marker of captureMarkers) {
+    const elapsed = now - marker.startedAt;
+    if (elapsed < 0) continue;
+    const progress = Math.min(1, elapsed / 1200);
+    const point = toScreen(vertices.get(marker.vertex));
+    const pulse = 1 + Math.sin(progress * Math.PI) * 0.22;
+    ctx.save();
+    ctx.globalAlpha = 1 - progress * 0.72;
+    const outerColor = marker.kind === "respawn" ? "rgba(74, 132, 169, 0.95)" : "rgba(168, 75, 68, 0.95)";
+    const innerColor = marker.kind === "respawn" ? "rgba(108, 141, 85, 0.94)" : "rgba(212, 154, 36, 0.92)";
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 34 * pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = outerColor;
+    ctx.lineWidth = 6;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 20 * pulse, 0, Math.PI * 2);
+    ctx.strokeStyle = innerColor;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = marker.kind === "respawn" ? "rgba(74, 132, 169, 0.18)" : marker.owner === "W" ? "rgba(255, 250, 240, 0.38)" : "rgba(32, 36, 42, 0.3)";
+    ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -692,13 +789,14 @@ function draw() {
   if (hover?.kind === "cell" && canBuildCastle(hover.key, currentPlayer())) {
     const center = toScreen(cellByKey(hover.key));
     ctx.beginPath();
-    ctx.arc(center.x, center.y, 24, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(108, 141, 85, 0.9)";
-    ctx.lineWidth = 4;
+    ctx.arc(center.x, center.y, pendingTouchCell?.key === hover.key ? 48 : 43, 0, Math.PI * 2);
+    ctx.strokeStyle = pendingTouchCell?.key === hover.key ? "rgba(212, 154, 36, 0.92)" : "rgba(108, 141, 85, 0.9)";
+    ctx.lineWidth = pendingTouchCell?.key === hover.key ? 7 : 5;
     ctx.stroke();
   }
 
   drawTargets();
+  drawCaptureMarkers();
   for (const knight of state.knights) drawKnight(knight);
 }
 
@@ -779,8 +877,10 @@ function eventPoint(event) {
   return fromScreen(x, y);
 }
 
-function hitTest(event) {
+function hitTest(event, options = {}) {
   const point = eventPoint(event);
+  const edgeRadius = options.edgeRadius ?? EDGE_HIT_RADIUS;
+  const castleRadius = options.castleRadius ?? CASTLE_HIT_RADIUS;
   const ownKnight = nearestOwnKnight(point, currentPlayer());
   if (ownKnight) return { kind: "vertex", key: ownKnight };
   if (selectedKnight) {
@@ -793,13 +893,13 @@ function hitTest(event) {
   const castleCell = nearestCellCandidate(point);
   if (
     castleCell.key &&
-    castleCell.dist < CASTLE_HIT_RADIUS / layout.scale &&
+    castleCell.dist < castleRadius / layout.scale &&
     canBuildCastle(castleCell.key, currentPlayer())
   ) {
     return { kind: "cell", key: castleCell.key };
   }
   const edge = nearestEdgeCandidate(point);
-  if (edge.key && edge.dist < EDGE_HIT_RADIUS / layout.scale) {
+  if (edge.key && edge.dist < edgeRadius / layout.scale) {
     const isBreakable = state.walls[edge.key] && canDestroyWall(edge.key, currentPlayer());
     const isBuildable = !state.walls[edge.key] && canBuildWall(edge.key, currentPlayer());
     if (isBreakable || isBuildable) return { kind: "edge", key: edge.key };
@@ -825,6 +925,7 @@ function handleBoardClick(event) {
 
   if (hit.kind === "vertex") {
     pendingTouchEdge = null;
+    pendingTouchCell = null;
     hover = null;
     const knight = knightAt(hit.key);
     if (knight && knight.owner === owner) {
@@ -838,12 +939,14 @@ function handleBoardClick(event) {
 
   if (hit.kind === "edge") {
     pendingTouchEdge = null;
+    pendingTouchCell = null;
     if (state.walls[hit.key]) destroyWall(hit.key);
     else buildWall(hit.key);
     return;
   }
 
   pendingTouchEdge = null;
+  pendingTouchCell = null;
   if (hit.kind === "cell" && canBuildCastle(hit.key, owner)) buildCastle(hit.key);
 }
 
@@ -854,11 +957,15 @@ function handleBoardPointerUp(event) {
   }
 
   if (state.winner) return;
-  const hit = hitTest(event);
+  const hit = hitTest(event, {
+    edgeRadius: pendingTouchEdge ? TOUCH_CONFIRM_EDGE_HIT_RADIUS : TOUCH_EDGE_HIT_RADIUS,
+    castleRadius: pendingTouchCell ? TOUCH_CONFIRM_CASTLE_HIT_RADIUS : TOUCH_CASTLE_HIT_RADIUS,
+  });
   const owner = currentPlayer();
 
   if (hit?.kind === "edge") {
     const action = edgeAction(hit.key);
+    pendingTouchCell = null;
     if (action && pendingTouchEdge?.key === hit.key && pendingTouchEdge.action === action) {
       pendingTouchEdge = null;
       hover = null;
@@ -872,7 +979,22 @@ function handleBoardPointerUp(event) {
     return;
   }
 
+  if (hit?.kind === "cell" && canBuildCastle(hit.key, owner)) {
+    pendingTouchEdge = null;
+    if (pendingTouchCell?.key === hit.key) {
+      pendingTouchCell = null;
+      hover = null;
+      buildCastle(hit.key);
+      return;
+    }
+    pendingTouchCell = { key: hit.key };
+    hover = hit;
+    draw();
+    return;
+  }
+
   pendingTouchEdge = null;
+  pendingTouchCell = null;
   hover = null;
 
   if (!hit) {
@@ -905,7 +1027,14 @@ function updateUi() {
   els.blackScore.textContent = score("B");
   els.whiteWalls.textContent = state.reserves.W;
   els.blackWalls.textContent = state.reserves.B;
-  els.castleReserve.textContent = state.reserves.castles;
+  els.castleReserve.textContent = state.reserves.castles.W + state.reserves.castles.B;
+  els.castleTokens.forEach((token) => {
+    const owner = token.dataset.castleToken;
+    const ownerIndex = [...els.castleTokens].filter((item) => item.dataset.castleToken === owner).indexOf(token);
+    const spent = ownerIndex >= state.reserves.castles[owner];
+    token.hidden = spent;
+    token.parentElement.hidden = spent;
+  });
   els.winner.textContent = state.winner ? PLAYERS[state.winner].name : "-";
   els.winTitle.textContent = state.winner ? `${PLAYERS[state.winner].name} Wins` : "";
   els.winModal.hidden = !state.winner;
@@ -918,20 +1047,30 @@ function resetGame() {
   selectedKnight = null;
   hover = null;
   pendingTouchEdge = null;
+  pendingTouchCell = null;
+  captureMarkers = [];
+  if (captureAnimationFrame) cancelAnimationFrame(captureAnimationFrame);
+  captureAnimationFrame = null;
   updateUi();
   resizeCanvas();
 }
 
-els.undo.addEventListener("click", () => {
+function undoLastAction() {
   const previous = history.pop();
   if (!previous) return;
   state = previous;
   selectedKnight = null;
   pendingTouchEdge = null;
+  pendingTouchCell = null;
+  captureMarkers = [];
+  if (captureAnimationFrame) cancelAnimationFrame(captureAnimationFrame);
+  captureAnimationFrame = null;
   hover = null;
   updateUi();
   draw();
-});
+}
+
+els.undoButtons.forEach((button) => button.addEventListener("click", undoLastAction));
 els.reset.addEventListener("click", () => {
   els.confirmResetModal.hidden = false;
 });
@@ -945,10 +1084,17 @@ els.confirmReset.addEventListener("click", () => {
 els.winReset.addEventListener("click", () => {
   els.winModal.hidden = true;
 });
+els.howTo.addEventListener("click", () => {
+  els.howToModal.hidden = false;
+});
+els.closeHowTo.addEventListener("click", () => {
+  els.howToModal.hidden = true;
+});
 canvas.addEventListener("pointerup", handleBoardPointerUp);
 canvas.addEventListener("pointermove", (event) => {
   if (event.pointerType === "touch") return;
   pendingTouchEdge = null;
+  pendingTouchCell = null;
   hover = hitTest(event);
   draw();
 });
@@ -957,15 +1103,11 @@ canvas.addEventListener("pointerleave", (event) => {
   hover = null;
   draw();
 });
-window.addEventListener("resize", () => {
-  if (resizeFrame) cancelAnimationFrame(resizeFrame);
-  resizeFrame = requestAnimationFrame(() => {
-    resizeFrame = null;
-    resizeCanvas();
-  });
-});
+window.addEventListener("resize", scheduleResize);
+
 
 buildGeometry();
+resetGame();
 
 Promise.all(
   Object.entries(ASSET_PATHS).map(
@@ -980,5 +1122,6 @@ Promise.all(
   ),
 ).then(() => {
   assetsReady = true;
-  resetGame();
+  draw();
+  scheduleResize();
 });
