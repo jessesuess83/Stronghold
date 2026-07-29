@@ -427,6 +427,7 @@ button {
   gap: 10px;
 }
 
+.confirm-modal .dialog-card,
 .online-color-modal .dialog-card {
   display: grid;
   font-family: "Cinzel", Georgia, "Times New Roman", serif;
@@ -451,8 +452,16 @@ button {
   text-align: left;
 }
 
+.rules-card h2,
+.rules-card h3,
+.rules-card h4 {
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
 .rules-card h2 {
-  margin-right: 120px;
+  margin: -34px 48px 18px 0;
 }
 
 .rules-card h3 {
@@ -485,9 +494,16 @@ button {
 }
 
 .close-button {
-  position: absolute;
-  top: 16px;
-  right: 16px;
+  position: sticky;
+  top: 0;
+  left: calc(100% - 34px);
+  z-index: 2;
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-size: 1.05rem;
+  font-weight: 900;
 }
 
 @media (max-width: 720px) {

@@ -10,7 +10,7 @@
     <title>Stronghold</title>
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260728-online7" />
+    <link rel="stylesheet" href="styles.css?v=20260728-online11" />
   </head>
   <body>
     <main class="app">
@@ -95,10 +95,10 @@
     <div class="confirm-modal" id="confirmResetModal" hidden>
       <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="confirmResetTitle">
         <p class="eyebrow">Local Game</p>
-        <h2 id="confirmResetTitle">Are you sure?</h2>
+        <h2 id="confirmResetTitle">Start new local game?</h2>
         <div class="confirm-actions">
           <button id="cancelResetBtn" class="secondary" title="Keep current game">Cancel</button>
-          <button id="confirmResetBtn" class="secondary danger" title="Start local game">Local Game</button>
+          <button id="confirmResetBtn" class="secondary danger" title="Start local game">Okay</button>
         </div>
       </div>
     </div>
@@ -106,10 +106,10 @@
     <div class="online-color-modal" id="onlineColorModal" hidden>
       <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="onlineColorTitle">
         <p class="eyebrow">Online Game</p>
-        <h2 id="onlineColorTitle">Choose your color</h2>
+        <h2 id="onlineColorTitle">Start new online game?</h2>
         <div class="online-color-choice" id="onlineColorChoice" aria-label="Choose your online color">
-          <button class="color-choice" type="button" data-online-color="W">White</button>
-          <button class="color-choice" type="button" data-online-color="B">Black</button>
+          <button class="color-choice" type="button" data-online-color="W">Play White</button>
+          <button class="color-choice" type="button" data-online-color="B">Play Black</button>
         </div>
         <button id="cancelOnlineColorBtn" class="secondary compact" title="Cancel online game setup">Cancel</button>
       </div>
@@ -117,7 +117,7 @@
 
     <div class="how-to-modal" id="howToModal" hidden>
       <div class="dialog-card rules-card" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
-        <button id="closeHowToBtn" class="secondary close-button" title="Close how to play">OK</button>
+        <button id="closeHowToBtn" class="secondary close-button" title="Close how to play" aria-label="Close how to play">X</button>
         <h2 id="howToTitle">How to Play</h2>
 
         <h3>Objective</h3>
@@ -171,6 +171,6 @@
       </div>
     </div>
 
-    <script src="game.js?v=20260728-online9"></script>
+    <script src="game.js?v=20260728-online15"></script>
   </body>
 </html>

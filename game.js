@@ -214,7 +214,7 @@ function onlineRoleName(role) {
 }
 
 function updateOnlineColorChoice() {
-  if (els.onlineColorChoice) els.onlineColorChoice.hidden = onlineGame.joined;
+  if (els.onlineColorChoice) els.onlineColorChoice.hidden = false;
 }
 
 function showOnlineTurnBlocked() {
@@ -1029,16 +1029,16 @@ function publishOnlineState() {
 }
 
 function openOnlineColorModal() {
-  if (onlineGame.joined) {
-    updateOnlineStatus();
-    return;
-  }
   updateOnlineColorChoice();
   if (els.onlineColorModal) els.onlineColorModal.hidden = false;
 }
 
 async function createOnlineGame(player = preferredOnlinePlayer) {
   preferredOnlinePlayer = player === "B" ? "B" : "W";
+  leaveOnlineGame();
+  prepareFreshGameState();
+  updateUi();
+  resizeCanvas();
   try {
     const socket = await connectOnlineSocket();
     socket.emit("createGame", { state: cloneState(state), player: preferredOnlinePlayer }, (response) => {
@@ -1201,9 +1201,11 @@ function updateUi() {
   els.whiteHud.classList.toggle("active", !state.winner && state.turn === "W");
   els.blackHud.classList.toggle("active", !state.winner && state.turn === "B");
   els.online?.classList.toggle("active", onlineGame.joined);
+  els.reset?.classList.toggle("active", !onlineGame.joined);
   els.undoButtons.forEach((button) => {
+    button.hidden = onlineGame.joined;
     button.disabled = onlineGame.joined;
-    button.title = onlineGame.joined ? "Undo is disabled during online games" : "Undo last action";
+    button.title = onlineGame.joined ? "Undo is unavailable during online games" : "Undo last action";
   });
   updateOnlineStatus();
   els.whiteScore.textContent = score("W");
@@ -1223,11 +1225,18 @@ function updateUi() {
   els.log.innerHTML = state.log.map((item) => `<p>${item}</p>`).join("");
 }
 
-function resetGame() {
-  if (onlineGame.joined) {
-    updateOnlineStatus("Local Game is disabled during online games.");
-    return;
-  }
+function leaveOnlineGame() {
+  if (onlineGame.socket) onlineGame.socket.disconnect();
+  onlineGame = {
+    socket: null,
+    roomId: null,
+    player: null,
+    inviteUrl: null,
+    joined: false,
+  };
+}
+
+function prepareFreshGameState() {
   state = createInitialState();
   history = [];
   selectedKnight = null;
@@ -1237,6 +1246,11 @@ function resetGame() {
   captureMarkers = [];
   if (captureAnimationFrame) cancelAnimationFrame(captureAnimationFrame);
   captureAnimationFrame = null;
+}
+
+function resetGame() {
+  leaveOnlineGame();
+  prepareFreshGameState();
   updateUi();
   resizeCanvas();
 }
@@ -1259,7 +1273,6 @@ function undoLastAction() {
 els.undoButtons.forEach((button) => button.addEventListener("click", undoLastAction));
 els.onlineColorButtons?.forEach((button) => {
   button.addEventListener("click", () => {
-    if (onlineGame.joined) return;
     const selectedPlayer = button.dataset.onlineColor === "B" ? "B" : "W";
     if (els.onlineColorModal) els.onlineColorModal.hidden = true;
     createOnlineGame(selectedPlayer);
