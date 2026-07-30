@@ -14,7 +14,7 @@ const TOUCH_CASTLE_HIT_RADIUS = 42;
 const TOUCH_CONFIRM_CASTLE_HIT_RADIUS = 50;
 const CASTLE_TILE_RESERVE = 6;
 const WIN_CASTLE_COUNT = 4;
-const ACTION_MARKER_DURATION = 720;
+const ACTION_MARKER_DURATION = 520;
 const BOARD_SCALE = 0.99;
 const PLAYERS = {
   W: { name: "White", wallColor: "#f8f4e8", pieceColor: "#fffdf7", text: "#1f252c" },
@@ -50,6 +50,7 @@ const els = {
   undoButtons: document.querySelectorAll("[data-undo]"),
   reset: document.getElementById("resetBtn"),
   ai: document.getElementById("aiBtn"),
+  copyAiLog: document.getElementById("copyAiLogBtn"),
   aiColorModal: document.getElementById("aiColorModal"),
   aiColorButtons: document.querySelectorAll("[data-ai-color]"),
   online: document.getElementById("onlineBtn"),
@@ -84,6 +85,7 @@ let assetsReady = false;
 let resizeFrame = null;
 let suppressOnlinePublish = false;
 let preferredOnlinePlayer = "W";
+let aiReviewLog = [];
 let aiGame = {
   enabled: false,
   player: "B",
@@ -277,6 +279,70 @@ function addLog(message) {
   state.log = state.log.slice(0, 8);
 }
 
+function summarizeActionForReview(action) {
+  if (!action) return null;
+  if (action.type === "move") return { type: action.type, knightId: action.knightId, to: action.to };
+  if (action.type === "buildWall" || action.type === "destroyWall") return { type: action.type, edge: action.edge };
+  if (action.type === "buildCastle") return { type: action.type, cell: action.cell };
+  return { type: action.type };
+}
+
+function reviewSnapshot() {
+  return {
+    turn: state.turn,
+    winner: state.winner,
+    score: { W: score("W"), B: score("B") },
+    reserves: { W: state.reserves.W, B: state.reserves.B, castles: state.reserves.castles },
+    castles: Object.fromEntries(Object.entries(state.castles).map(([key, castle]) => [key, { owner: castle.owner, capital: Boolean(castle.capital) }])),
+    knights: state.knights.map((knight) => ({ id: knight.id, owner: knight.owner, vertex: knight.vertex, moves: legalMoveTargets(knight).size })),
+    walls: Object.entries(state.walls).map(([edge, owner]) => [edge, owner]),
+  };
+}
+
+function recordAiReviewTurn(actor, action, details = {}) {
+  if (!aiGame.enabled || onlineGame.joined) return;
+  const entry = {
+    n: aiReviewLog.length + 1,
+    actor,
+    ai: actor === aiGame.player,
+    action: summarizeActionForReview(action),
+    after: reviewSnapshot(),
+  };
+  if (details.candidates?.length) entry.aiCandidates = details.candidates;
+  if (details.note) entry.note = details.note;
+  aiReviewLog.push(entry);
+  aiReviewLog = aiReviewLog.slice(-120);
+}
+
+function aiReviewExportText() {
+  const payload = {
+    strongholdAiLogVersion: 1,
+    exportedAt: new Date().toISOString(),
+    aiPlayer: aiGame.player,
+    humanPlayer: enemyOf(aiGame.player),
+    final: reviewSnapshot(),
+    turns: aiReviewLog,
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+async function copyAiReviewLog() {
+  if (!aiReviewLog.length) {
+    addLog("No AI game log yet.");
+    updateUi();
+    return;
+  }
+  const text = aiReviewExportText();
+  try {
+    await navigator.clipboard.writeText(text);
+    addLog("AI game log copied.");
+  } catch (error) {
+    console.log(text);
+    addLog("AI game log printed to console.");
+  }
+  updateUi();
+}
+
 function edgeTouchesOwner(edge, owner) {
   const ownKnight = state.knights.some((knight) => knight.owner === owner && (knight.vertex === edge.a || knight.vertex === edge.b));
   const ownWall = Object.entries(state.walls).some(([key, wallOwner]) => {
@@ -394,8 +460,10 @@ function moveKnight(vertex) {
   if (!legalMoveTargets(knight).has(vertex)) return false;
   pushHistory();
   knight.vertex = vertex;
+  const action = { type: "move", knightId: knight.id, to: vertex };
   addLog(`${PLAYERS[knight.owner].name} moved ${knight.id}.`);
   finishTurn();
+  recordAiReviewTurn(knight.owner, action);
   return true;
 }
 
@@ -406,8 +474,10 @@ function buildWall(key) {
   pushHistory();
   state.walls[key] = owner;
   state.reserves[owner] -= 1;
+  const action = { type: "buildWall", edge: key };
   addLog(`${PLAYERS[owner].name} built a wall.`);
   finishTurn();
+  recordAiReviewTurn(owner, action);
   return true;
 }
 
@@ -425,8 +495,10 @@ function destroyWall(key) {
   const wallOwner = state.walls[key];
   delete state.walls[key];
   state.reserves[wallOwner] += 1;
+  const action = { type: "destroyWall", edge: key };
   addLog(`${PLAYERS[knight.owner].name} broke an enemy wall.`);
   finishTurn();
+  recordAiReviewTurn(knight.owner, action);
   return true;
 }
 
@@ -443,8 +515,10 @@ function buildCastle(key) {
   pushHistory();
   state.castles[key] = { owner, capital: false, builtBy: owner };
   state.reserves.castles -= 1;
+  const action = { type: "buildCastle", cell: key };
   addLog(`${PLAYERS[owner].name} raised a castle.`);
   finishTurn();
+  recordAiReviewTurn(owner, action);
   return true;
 }
 
@@ -737,7 +811,10 @@ function knightTrapWarningAt(vertexKeyValue, owner, knightId = null) {
 
   const adjacent = adjacentWallCounts(vertexKeyValue, owner);
   const nearbyEnemies = enemyKnightNearVertex(vertexKeyValue, owner);
-  const fragileExits = exits.filter((target) => enemyCanBuildAdjacentToVertex(target, owner) || enemyKnightNearVertex(target, owner, 1.25)).length;
+  if (exits.length >= 5 && adjacent.enemy === 0 && nearbyEnemies === 0) return 0;
+  const fragileExits = exits.length <= 4
+    ? exits.filter((target) => enemyCanBuildAdjacentToVertex(target, owner) || enemyKnightNearVertex(target, owner, 1.25)).length
+    : 0;
   const secureExits = Math.max(0, exits.length - fragileExits);
   let value = 0;
 
@@ -773,7 +850,7 @@ function ownKnightVulnerabilityScore(owner) {
 
     value += adjacent.enemy * (moves <= 2 ? 760 : 180);
     value += nearbyEnemies * (moves <= 2 ? 620 : 120);
-    value += knightTrapWarningAt(knight.vertex, owner, knight.id) * 0.34;
+    if (moves <= 4 || adjacent.enemy || nearbyEnemies) value += knightTrapWarningAt(knight.vertex, owner, knight.id) * 0.34;
   }
   return value;
 }
@@ -800,7 +877,7 @@ function moveSelfCaptureRiskPenalty(action, owner) {
   else if (moves === 2) value += 1250;
   value += adjacent.enemy * (moves <= 2 ? 620 : 130);
   value += nearbyEnemies * (moves <= 2 ? 520 : 90);
-  value += knightTrapWarningAt(action.to, owner, knight.id) * 0.48;
+  if (moves <= 4 || adjacent.enemy || nearbyEnemies) value += knightTrapWarningAt(action.to, owner, knight.id) * 0.48;
   return value;
 }
 
@@ -1290,7 +1367,7 @@ function evaluateActionInPlace(action, owner) {
   return boardScoreFor(owner) + immediateActionBonus(action, owner, beforeCastles, beforeEnemyCastles);
 }
 
-function bestImmediateReplyScore(owner, limit = 36) {
+function bestImmediateReplyScore(owner, limit = 6) {
   const actions = legalActionsForPlayer(owner);
   if (!actions.length) return 0;
   const ordered = actions.sort((a, b) => actionPriority(b) - actionPriority(a)).slice(0, limit);
@@ -1377,7 +1454,11 @@ function buildPhaseActions(actions, owner) {
 }
 
 function emergencyDefenseActions(actions, owner) {
-  const urgentThreats = threatenedFriendlyCastles(owner).filter((threat) => threat.enemyWalls >= 3);
+  const activeCounterPressure = enemyCastlePressureProfile(owner).some((threat) => threat.ownWalls >= 2);
+  const urgentThreats = threatenedFriendlyCastles(owner).filter((threat) => (
+    threat.enemyWalls >= 3 ||
+    (castleReserveGone() && threat.enemyWalls >= 2 && !activeCounterPressure)
+  ));
   if (!urgentThreats.length) return actions;
   const urgentKeys = new Set(urgentThreats.map((threat) => threat.key));
 
@@ -1388,36 +1469,70 @@ function emergencyDefenseActions(actions, owner) {
   const blockingBuilds = actions.filter((action) => action.type === "buildWall" && touchesUrgentCastle(action.edge));
   if (blockingBuilds.length) return blockingBuilds;
 
-  const moveActions = actions.filter((action) => {
-    if (action.type !== "move") return false;
-    const knight = state.knights.find((item) => item.id === action.knightId && item.owner === owner);
-    if (!knight) return false;
-    const from = vertices.get(knight.vertex);
-    const to = vertices.get(action.to);
-    return urgentThreats.some((threat) => {
-      const fromDistance = Math.hypot(from.x - threat.cell.x, from.y - threat.cell.y) / HEX_SIZE;
-      const toDistance = Math.hypot(to.x - threat.cell.x, to.y - threat.cell.y) / HEX_SIZE;
-      return threat.cell.vertices.includes(action.to) || toDistance + 0.15 < fromDistance;
-    });
-  });
-  if (moveActions.length) return moveActions;
+  const moveActions = actions
+    .filter((action) => {
+      if (action.type !== "move") return false;
+      const knight = state.knights.find((item) => item.id === action.knightId && item.owner === owner);
+      if (!knight) return false;
+      const from = vertices.get(knight.vertex);
+      const to = vertices.get(action.to);
+      return urgentThreats.some((threat) => {
+        const fromDistance = Math.hypot(from.x - threat.cell.x, from.y - threat.cell.y) / HEX_SIZE;
+        const toDistance = Math.hypot(to.x - threat.cell.x, to.y - threat.cell.y) / HEX_SIZE;
+        return threat.cell.vertices.includes(action.to) || toDistance + 0.15 < fromDistance;
+      });
+    })
+    .map((action) => {
+      const best = urgentThreats.reduce((current, threat) => {
+        const to = vertices.get(action.to);
+        const toDistance = Math.hypot(to.x - threat.cell.x, to.y - threat.cell.y) / HEX_SIZE;
+        const onCastle = threat.cell.vertices.includes(action.to);
+        if (!current || onCastle || (!current.onCastle && toDistance < current.toDistance)) return { action, toDistance, onCastle };
+        return current;
+      }, null);
+      return best;
+    })
+    .filter(Boolean);
+  if (moveActions.length) {
+    const onCastleMoves = moveActions.filter((item) => item.onCastle);
+    if (onCastleMoves.length) return onCastleMoves.map((item) => item.action);
+    const closestDistance = Math.min(...moveActions.map((item) => item.toDistance));
+    return moveActions
+      .filter((item) => item.toDistance <= closestDistance + 0.35)
+      .map((item) => item.action);
+  }
 
   return actions;
 }
 
-function chooseAiAction(owner) {
+function chooseAiAction(owner, options = {}) {
   const legalActions = legalActionsForPlayer(owner);
   const defenseActions = emergencyDefenseActions(legalActions, owner);
   const actions = buildPhaseActions(defenseActions, owner);
-  if (!actions.length) return null;
+  if (!actions.length) return options.explain ? { action: null, candidates: [] } : null;
   let best = null;
   let bestScore = -Infinity;
+  const candidates = [];
   for (const action of actions) {
-    const value = simulatedActionScore(action, owner) + Math.random() * 0.001;
+    const scoreValue = simulatedActionScore(action, owner);
+    const value = scoreValue + Math.random() * 0.001;
+    if (options.explain) candidates.push({ action, score: scoreValue });
     if (value > bestScore) {
       best = action;
       bestScore = value;
     }
+  }
+  if (options.explain) {
+    candidates.sort((a, b) => b.score - a.score);
+    return {
+      action: best,
+      candidates: candidates.slice(0, 8).map((candidate) => ({
+        action: summarizeActionForReview(candidate.action),
+        score: Math.round(candidate.score),
+        defense: Math.round(castleDefenseActionBonus(candidate.action, owner)),
+        trapRisk: Math.round(moveSelfCaptureRiskPenalty(candidate.action, owner)),
+      })),
+    };
   }
   return best;
 }
@@ -1432,11 +1547,13 @@ function scheduleAiTurn() {
       updateUi();
       return;
     }
-    const action = chooseAiAction(aiGame.player);
+    const decision = chooseAiAction(aiGame.player, { explain: true });
+    const action = decision.action;
     aiGame.thinking = false;
     if (action) {
       const previous = cloneState(state);
       if (applyAction(action, { publish: false })) {
+        recordAiReviewTurn(aiGame.player, action, { candidates: decision.candidates });
         const markers = inferRemoteMarkers(previous, state);
         const fallback = markerForAction(action, aiGame.player);
         (markers.length ? markers : [fallback]).filter(Boolean).forEach((marker) => addActionMarker(marker));
@@ -1445,7 +1562,7 @@ function scheduleAiTurn() {
     }
     addLog(`${PLAYERS[aiGame.player].name} AI has no legal action.`);
     finishTurn({ publish: false });
-  }, 450);
+  }, 260);
 }
 
 function returnKnightHome(knight, fromVertex) {
@@ -2354,6 +2471,10 @@ function updateUi() {
   els.online?.classList.toggle("active", onlineGame.joined);
   els.reset?.classList.toggle("active", !onlineGame.joined && !aiGame.enabled);
   els.ai?.classList.toggle("active", aiGame.enabled && !onlineGame.joined);
+  if (els.copyAiLog) {
+    els.copyAiLog.hidden = !aiGame.enabled || onlineGame.joined;
+    els.copyAiLog.disabled = !aiReviewLog.length;
+  }
   els.undoButtons.forEach((button) => {
     button.hidden = onlineGame.joined;
     button.disabled = onlineGame.joined || aiGame.thinking;
@@ -2396,6 +2517,7 @@ function prepareFreshGameState() {
   pendingTouchEdge = null;
   pendingTouchCell = null;
   captureMarkers = [];
+  aiReviewLog = [];
   if (captureAnimationFrame) cancelAnimationFrame(captureAnimationFrame);
   captureAnimationFrame = null;
 }
@@ -2442,6 +2564,7 @@ function undoLastAction() {
 }
 
 els.undoButtons.forEach((button) => button.addEventListener("click", undoLastAction));
+els.copyAiLog?.addEventListener("click", copyAiReviewLog);
 els.ai?.addEventListener("click", openAiColorModal);
 els.aiColorButtons?.forEach((button) => {
   button.addEventListener("click", () => {
