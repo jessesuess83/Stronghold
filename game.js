@@ -14,6 +14,7 @@ const TOUCH_CASTLE_HIT_RADIUS = 42;
 const TOUCH_CONFIRM_CASTLE_HIT_RADIUS = 50;
 const CASTLE_TILE_RESERVE = 6;
 const WIN_CASTLE_COUNT = 4;
+const ACTION_MARKER_DURATION = 720;
 const BOARD_SCALE = 0.99;
 const PLAYERS = {
   W: { name: "White", wallColor: "#f8f4e8", pieceColor: "#fffdf7", text: "#1f252c" },
@@ -213,8 +214,14 @@ function currentPlayer() {
   return state.turn;
 }
 
+function inputLockMarkersActive() {
+  const now = performance.now();
+  return captureMarkers.some((marker) => marker.blocksInput && now - marker.startedAt < ACTION_MARKER_DURATION);
+}
+
 function canActLocally() {
   if (state.winner) return false;
+  if (inputLockMarkersActive()) return false;
   if (aiGame.enabled && state.turn === aiGame.player) return false;
   return !onlineGame.joined || (onlineGame.player && state.turn === onlineGame.player);
 }
@@ -235,6 +242,17 @@ function showOnlineTurnBlocked() {
     : `Spectating. ${PLAYERS[state.turn].name} to move.`;
   updateOnlineStatus(message);
   window.setTimeout(() => updateOnlineStatus(), 1600);
+}
+
+function allowLocalBoardCommit() {
+  if (canActLocally()) return true;
+  selectedKnight = null;
+  pendingTouchEdge = null;
+  pendingTouchCell = null;
+  hover = null;
+  showOnlineTurnBlocked();
+  draw();
+  return false;
 }
 
 function enemyOf(player) {
@@ -370,6 +388,7 @@ function legalMoveTargets(knight) {
 }
 
 function moveKnight(vertex) {
+  if (!allowLocalBoardCommit()) return false;
   const knight = state.knights.find((item) => item.id === selectedKnight);
   if (!knight) return false;
   if (!legalMoveTargets(knight).has(vertex)) return false;
@@ -381,6 +400,7 @@ function moveKnight(vertex) {
 }
 
 function buildWall(key) {
+  if (!allowLocalBoardCommit()) return false;
   const owner = currentPlayer();
   if (!canBuildWall(key, owner)) return false;
   pushHistory();
@@ -392,6 +412,7 @@ function buildWall(key) {
 }
 
 function destroyWall(key) {
+  if (!allowLocalBoardCommit()) return false;
   const owner = currentPlayer();
   const knight = destroyerForWall(key, owner);
   if (!knight) {
@@ -410,6 +431,7 @@ function destroyWall(key) {
 }
 
 function buildCastle(key) {
+  if (!allowLocalBoardCommit()) return false;
   const owner = currentPlayer();
   const reason = castleBuildReason(key, owner);
   if (reason) {
@@ -505,9 +527,268 @@ function castleReserveGone() {
   return state.reserves.castles <= 0;
 }
 
+function builtCastleCount() {
+  return CASTLE_TILE_RESERVE - state.reserves.castles;
+}
+
+function castleAttackMode(owner) {
+  return castleReserveGone() || state.reserves.castles <= 1 || builtCastleCount() >= 5 || score(enemyOf(owner)) >= 3;
+}
+
+function thirdCastleUrgency(owner) {
+  if (castleReserveGone() || score(owner) >= 3) return 0;
+  const scoreGap = Math.max(0, score(enemyOf(owner)) - score(owner));
+  const enemyNearWin = score(enemyOf(owner)) >= 3 ? 0.8 : 0;
+  return 1.5 + (3 - score(owner)) * 0.9 + scoreGap * 0.45 + enemyNearWin;
+}
+
+function thirdCastleStatusScore(owner) {
+  const owned = score(owner);
+  if (owned >= 3) return 8600 + owned * 2200;
+  return owned * 2300 - (3 - owned) * 2600;
+}
+
+function ownCastleWallPressure(edgeKeyValue, owner) {
+  if (castleReserveGone()) return 0;
+  const edge = edges.get(edgeKeyValue);
+  if (!edge) return 0;
+  const urgency = thirdCastleUrgency(owner);
+  let value = 0;
+  for (const cellKeyValue of edge.cells || []) {
+    const cell = cellByKey(cellKeyValue);
+    if (!cell || state.castles[cellKeyValue] || !hasCastleSpacing(cell)) continue;
+    const afterOwnWalls = wallCountForCell(cell, owner) + (state.walls[edgeKeyValue] === owner ? 0 : 1);
+    const emptyEdges = cell.edges.filter((key) => !state.walls[key] || key === edgeKeyValue).length;
+    const multiplier = urgency ? 1 + urgency * 0.85 : 1;
+    if (afterOwnWalls >= 4) value += 12200 * multiplier;
+    else if (afterOwnWalls === 3 && emptyEdges >= 1) value += 6800 * multiplier;
+    else if (afterOwnWalls === 2 && emptyEdges >= 2) value += 2600 * multiplier;
+    else value += 520 * multiplier;
+  }
+  return value;
+}
+
+function enemyCastleWallPressure(edgeKeyValue, owner) {
+  const edge = edges.get(edgeKeyValue);
+  if (!edge) return 0;
+  let value = 0;
+  for (const cellKeyValue of edge.cells || []) {
+    const cell = cellByKey(cellKeyValue);
+    const castle = state.castles[cellKeyValue];
+    if (!cell || castle?.owner !== enemyOf(owner) || castle.capital) continue;
+    const afterOwnWalls = wallCountForCell(cell, owner) + (state.walls[edgeKeyValue] === owner ? 0 : 1);
+    const enemyWalls = wallCountForCell(cell, enemyOf(owner));
+    const modeMultiplier = castleAttackMode(owner) ? 1.65 : 1;
+    if (afterOwnWalls >= 4) value += 21000 * modeMultiplier;
+    else if (afterOwnWalls === 3) value += 9800 * modeMultiplier;
+    else if (afterOwnWalls === 2) value += 3900 * modeMultiplier;
+    else value += 820 * modeMultiplier;
+    value += Math.max(0, 3 - enemyWalls) * 420;
+  }
+  return value;
+}
+
+function edgesShareVertex(firstKey, secondKey) {
+  const first = edges.get(firstKey);
+  const second = edges.get(secondKey);
+  return Boolean(first && second && (first.a === second.a || first.a === second.b || first.b === second.a || first.b === second.b));
+}
+
+function edgeMidpoint(edgeKeyValue) {
+  const edge = edges.get(edgeKeyValue);
+  if (!edge) return null;
+  const a = vertices.get(edge.a);
+  const b = vertices.get(edge.b);
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function blockedCompletionTargets(owner) {
+  const targets = [];
+  const enemy = enemyOf(owner);
+  for (const [cellKeyValue, castle] of Object.entries(state.castles)) {
+    if (castle.capital || castle.owner !== enemy) continue;
+    const cell = cellByKey(cellKeyValue);
+    if (!cell || wallCountForCell(cell, owner) !== 3) continue;
+    for (const edgeKeyValue of cell.edges) {
+      if (state.walls[edgeKeyValue] || canBuildWall(edgeKeyValue, owner)) continue;
+      const edge = edges.get(edgeKeyValue);
+      if (!edge) continue;
+      const enemyKnightBlockers = state.knights.filter((knight) => knight.owner === enemy && (knight.vertex === edge.a || knight.vertex === edge.b));
+      const enemyWallBlockers = Object.entries(state.walls)
+        .filter(([key, wallOwner]) => wallOwner === enemy && edgesShareVertex(key, edgeKeyValue))
+        .map(([key]) => key);
+      const protectorVertices = [...new Set(
+        enemyWallBlockers
+          .filter((key) => isWallProtected(key))
+          .flatMap((key) => {
+            const wall = edges.get(key);
+            return state.knights
+              .filter((knight) => knight.owner === enemy && (knight.vertex === wall.a || knight.vertex === wall.b))
+              .map((knight) => knight.vertex);
+          }),
+      )];
+      targets.push({
+        cell: cellKeyValue,
+        edge: edgeKeyValue,
+        midpoint: edgeMidpoint(edgeKeyValue),
+        needsConnection: !edgeTouchesOwner(edge, owner),
+        enemyKnightBlockers,
+        enemyWallBlockers,
+        protectorVertices,
+        vulnerableEnemyWallBlockers: enemyWallBlockers.filter((key) => !isWallProtected(key)),
+      });
+    }
+  }
+  return targets;
+}
+
+function vertexDistance(firstKey, secondKey) {
+  const first = vertices.get(firstKey);
+  const second = vertices.get(secondKey);
+  if (!first || !second) return Infinity;
+  return Math.hypot(first.x - second.x, first.y - second.y) / HEX_SIZE;
+}
+
+function blockedCompletionPrepBonus(action, owner) {
+  const targets = blockedCompletionTargets(owner);
+  if (!targets.length) return 0;
+  let value = 0;
+
+  if (action.type === "destroyWall") {
+    for (const target of targets) {
+      if (!target.enemyWallBlockers.includes(action.edge)) continue;
+      value += target.vulnerableEnemyWallBlockers.includes(action.edge) ? 7200 : 3200;
+      if (edges.get(action.edge)?.cells?.includes(target.cell)) value += 1800;
+    }
+  }
+
+  if (action.type === "buildWall") {
+    for (const target of targets) {
+      if (target.needsConnection && edgesShareVertex(action.edge, target.edge)) value += 5200;
+      else if (edges.get(action.edge)?.cells?.includes(target.cell)) value += 1500;
+    }
+  }
+
+  if (action.type === "move") {
+    const knight = state.knights.find((item) => item.id === action.knightId && item.owner === owner);
+    if (!knight) return value;
+    const from = vertices.get(knight.vertex);
+    const to = vertices.get(action.to);
+    for (const target of targets) {
+      if (!target.midpoint) continue;
+      const fromDistance = Math.hypot(from.x - target.midpoint.x, from.y - target.midpoint.y) / HEX_SIZE;
+      const toDistance = Math.hypot(to.x - target.midpoint.x, to.y - target.midpoint.y) / HEX_SIZE;
+      value += Math.max(0, fromDistance - toDistance) * 980;
+      const targetEdge = edges.get(target.edge);
+      if (target.needsConnection && (action.to === targetEdge.a || action.to === targetEdge.b)) value += 4600;
+      const adjacent = adjacentWallCounts(action.to, owner);
+      if (target.vulnerableEnemyWallBlockers.length) value += adjacent.vulnerableEnemy * 820;
+      for (const protectorVertex of target.protectorVertices || []) {
+        const fromProtectorDistance = vertexDistance(knight.vertex, protectorVertex);
+        const toProtectorDistance = vertexDistance(action.to, protectorVertex);
+        value += Math.max(0, fromProtectorDistance - toProtectorDistance) * 1100;
+        if (Array.from(vertices.get(action.to)?.edges || []).some((key) => {
+          const edge = edges.get(key);
+          return edge.a === protectorVertex || edge.b === protectorVertex;
+        })) value += 3800;
+      }
+    }
+  }
+
+  return value;
+}
+
+function enemyKnightConstraintScore(owner) {
+  let value = 0;
+  for (const knight of state.knights) {
+    if (knight.owner !== enemyOf(owner)) continue;
+    const moves = legalMoveTargets(knight).size;
+    if (moves === 0) value += 3600;
+    else if (moves === 1) value += 1250;
+    else if (moves === 2) value += 420;
+  }
+  return value;
+}
+
+function enemyCastlePressureProfile(owner) {
+  const profile = [];
+  for (const [key, castle] of Object.entries(state.castles)) {
+    if (castle.capital || castle.owner !== enemyOf(owner)) continue;
+    const cell = cellByKey(key);
+    if (!cell) continue;
+    const ownWalls = wallCountForCell(cell, owner);
+    const emptyEdges = cell.edges.filter((edgeKeyValue) => !state.walls[edgeKeyValue]).length;
+    const legalCompletionEdges = ownWalls === 3 ? cell.edges.filter((edgeKeyValue) => !state.walls[edgeKeyValue] && canBuildWall(edgeKeyValue, owner)).length : 0;
+    profile.push({ key, ownWalls, emptyEdges, legalCompletionEdges });
+  }
+  return profile;
+}
+
+function multiTargetAttackScore(owner) {
+  const threats = enemyCastlePressureProfile(owner);
+  const fronts2 = threats.filter((item) => item.ownWalls >= 2).length;
+  const fronts3 = threats.filter((item) => item.ownWalls >= 3).length;
+  const legalCompletions = threats.reduce((total, item) => total + item.legalCompletionEdges, 0);
+  let value = 0;
+  if (fronts2 >= 2) value += 4200 + (fronts2 - 2) * 1100;
+  if (fronts3 >= 2) value += 9800 + (fronts3 - 2) * 2600;
+  if (fronts3 >= 1 && fronts2 >= 2) value += 3600;
+  value += legalCompletions * 12500;
+  return value;
+}
+
+function actionMultiTargetBonus(action, owner) {
+  if (action.type !== "buildWall" && action.type !== "move") return 0;
+  const before = enemyCastlePressureProfile(owner);
+  const activeCells = before.filter((item) => item.ownWalls >= 2).map((item) => item.key);
+  const advancedCells = before.filter((item) => item.ownWalls >= 3).map((item) => item.key);
+  const blockedAdvancedCells = before.filter((item) => item.ownWalls >= 3 && item.legalCompletionEdges === 0).map((item) => item.key);
+  let value = 0;
+
+  if (action.type === "buildWall") {
+    const edge = edges.get(action.edge);
+    for (const cellKeyValue of edge?.cells || []) {
+      const castle = state.castles[cellKeyValue];
+      if (!castle || castle.capital || castle.owner !== enemyOf(owner)) continue;
+      const beforeThreat = before.find((item) => item.key === cellKeyValue);
+      const beforeWalls = beforeThreat?.ownWalls || 0;
+      const afterWalls = beforeWalls + 1;
+      const hasOtherActiveFront = activeCells.some((key) => key !== cellKeyValue);
+      const hasOtherAdvancedFront = advancedCells.some((key) => key !== cellKeyValue);
+      const hasOtherBlockedAdvancedFront = blockedAdvancedCells.some((key) => key !== cellKeyValue);
+
+      if (beforeWalls === 0 && hasOtherBlockedAdvancedFront) value += 2600;
+      else if (beforeWalls === 0 && hasOtherAdvancedFront) value += 1600;
+      if (beforeWalls === 1 && (hasOtherAdvancedFront || hasOtherBlockedAdvancedFront)) value += 4300;
+      if (beforeWalls < 2 && hasOtherActiveFront && afterWalls >= 2) value += 6500;
+      if (beforeWalls === 2) value += hasOtherActiveFront || hasOtherAdvancedFront ? 7600 : 3200;
+      if (beforeWalls === 3) value += hasOtherActiveFront ? 11800 : 7600;
+    }
+  }
+
+  if (action.type === "move") {
+    const knight = state.knights.find((item) => item.id === action.knightId && item.owner === owner);
+    if (!knight) return value;
+    const from = vertices.get(knight.vertex);
+    const to = vertices.get(action.to);
+    for (const threat of before) {
+      if (threat.ownWalls >= 3) continue;
+      const cell = cellByKey(threat.key);
+      const hasOtherFront = activeCells.some((key) => key !== threat.key);
+      if (!cell || !hasOtherFront) continue;
+      const fromDistance = Math.hypot(from.x - cell.x, from.y - cell.y) / HEX_SIZE;
+      const toDistance = Math.hypot(to.x - cell.x, to.y - cell.y) / HEX_SIZE;
+      value += Math.max(0, fromDistance - toDistance) * (threat.ownWalls >= 1 ? 520 : 320);
+      if (cell.vertices.includes(action.to)) value += threat.ownWalls >= 1 ? 1800 : 700;
+    }
+  }
+
+  return value;
+}
 function castleThreatScore(owner) {
   let value = 0;
   const enemy = enemyOf(owner);
+  const thirdCastleMultiplier = thirdCastleUrgency(owner) ? 1 + thirdCastleUrgency(owner) * 0.7 : 1;
   for (const cell of cells) {
     if (state.castles[cell.key]?.capital) continue;
     const ownWalls = wallCountForCell(cell, owner);
@@ -516,10 +797,10 @@ function castleThreatScore(owner) {
     const canPlaceCastle = !state.castles[cell.key] && hasCastleSpacing(cell);
     const targetValue = state.castles[cell.key]?.owner === enemy ? 1.35 : 1;
 
-    if (ownWalls >= 4 && (canPlaceCastle || state.castles[cell.key]?.owner === enemy)) value += 1450 * targetValue;
-    else if (ownWalls === 3 && emptyEdges >= 1 && canPlaceCastle) value += 520;
-    else if (ownWalls === 2 && emptyEdges >= 2 && canPlaceCastle) value += 170;
-    else if (ownWalls === 1 && emptyEdges >= 3 && canPlaceCastle) value += 35;
+    if (ownWalls >= 4 && (canPlaceCastle || state.castles[cell.key]?.owner === enemy)) value += 1450 * targetValue * thirdCastleMultiplier;
+    else if (ownWalls === 3 && emptyEdges >= 1 && canPlaceCastle) value += 520 * thirdCastleMultiplier;
+    else if (ownWalls === 2 && emptyEdges >= 2 && canPlaceCastle) value += 170 * thirdCastleMultiplier;
+    else if (ownWalls === 1 && emptyEdges >= 3 && canPlaceCastle) value += 35 * thirdCastleMultiplier;
 
     if (ownWalls >= 3 && enemyWalls === 0) value += 120;
     if (ownWalls >= 2 && enemyWalls === 0) value += 45;
@@ -588,6 +869,41 @@ function adjacentWallCounts(vertexKeyValue, owner) {
   return counts;
 }
 
+function castleLocalThreat(cell, owner) {
+  const enemy = enemyOf(owner);
+  const adjacentAttackers = state.knights.filter((knight) => knight.owner === enemy && cell.vertices.includes(knight.vertex)).length;
+  const nearbyAttackers = state.knights.filter((knight) => {
+    if (knight.owner !== enemy || cell.vertices.includes(knight.vertex)) return false;
+    const point = vertices.get(knight.vertex);
+    return point && Math.hypot(point.x - cell.x, point.y - cell.y) / HEX_SIZE <= 2.15;
+  }).length;
+  const enemyWalls = wallCountForCell(cell, enemy);
+  const ownWalls = wallCountForCell(cell, owner);
+  return adjacentAttackers * 3 + nearbyAttackers * 1.15 + enemyWalls * 1.4 + Math.max(0, 2 - ownWalls) * 1.8;
+}
+
+function castleGuardScore(vertexKeyValue, owner) {
+  let value = 0;
+  for (const [key, castle] of Object.entries(state.castles)) {
+    if (castle.capital || castle.owner !== owner) continue;
+    const cell = cellByKey(key);
+    if (!cell || !cell.vertices.includes(vertexKeyValue)) continue;
+    const defenders = state.knights.filter((knight) => knight.owner === owner && cell.vertices.includes(knight.vertex)).length;
+    const ownWalls = wallCountForCell(cell, owner);
+    const threat = castleLocalThreat(cell, owner);
+    const quiet = threat < 1.25 && ownWalls >= 2;
+
+    if (quiet) {
+      value += defenders <= 1 ? (castleReserveGone() ? 35 : 90) : -520 * (defenders - 1);
+    } else if (ownWalls >= 2 && threat < 3) {
+      value += defenders <= 1 ? 130 + threat * 45 : -300 * (defenders - 1);
+    } else {
+      value += 250 + threat * 140 - Math.max(0, defenders - 2) * 110;
+    }
+  }
+  return value;
+}
+
 function knightDevelopmentScore(owner) {
   const home = capitalCell(owner);
   let value = 0;
@@ -602,12 +918,44 @@ function knightDevelopmentScore(owner) {
     value += Math.min(homeDistance, 4.5) * (castleReserveGone() ? 115 : 75);
     const buildSiteDistance = nearestBuildSiteDistance(knight.vertex, owner);
     if (Number.isFinite(enemyCastleDistance)) value += Math.max(0, 7 - enemyCastleDistance) * (castleReserveGone() ? 145 : 10);
-    if (Number.isFinite(buildSiteDistance) && !castleReserveGone()) value += Math.max(0, 7 - buildSiteDistance) * 135;
-    if (Number.isFinite(ownCastleDistance)) value += Math.max(0, 4 - ownCastleDistance) * 55;
+    if (Number.isFinite(buildSiteDistance) && !castleReserveGone()) value += Math.max(0, 7 - buildSiteDistance) * (thirdCastleUrgency(owner) ? 210 : 135);
+    if (Number.isFinite(ownCastleDistance)) value += Math.max(0, 4 - ownCastleDistance) * 18;
+    value += castleGuardScore(knight.vertex, owner);
     value += adjacent.vulnerableEnemy * (castleReserveGone() ? 720 : 70);
     value += adjacent.enemy * (castleReserveGone() ? 220 : 30);
-    value += adjacent.own * 120;
+    value += adjacent.own * (castleReserveGone() ? 70 : 45);
   }
+  return value;
+}
+
+function quietCastleRedeployBonus(action, owner) {
+  if (action.type !== "move" || !castleReserveGone()) return 0;
+  const knight = state.knights.find((item) => item.id === action.knightId && item.owner === owner);
+  if (!knight) return 0;
+  let value = 0;
+  const fromPoint = vertices.get(knight.vertex);
+  const toPoint = vertices.get(action.to);
+
+  for (const [key, castle] of Object.entries(state.castles)) {
+    if (castle.capital || castle.owner !== owner) continue;
+    const cell = cellByKey(key);
+    if (!cell || !cell.vertices.includes(knight.vertex)) continue;
+    const defenders = state.knights.filter((item) => item.owner === owner && cell.vertices.includes(item.vertex)).length;
+    const threat = castleLocalThreat(cell, owner);
+    const ownWalls = wallCountForCell(cell, owner);
+    const leavingLastDefender = defenders <= 1 && threat >= 1.25;
+    if (leavingLastDefender) value -= 1800 + threat * 420;
+    if (ownWalls >= 2 && threat < 1.25) {
+      const fromEnemyDistance = nearestCastleDistance(knight.vertex, enemyOf(owner));
+      const toEnemyDistance = nearestCastleDistance(action.to, enemyOf(owner));
+      if (Number.isFinite(fromEnemyDistance) && Number.isFinite(toEnemyDistance)) {
+        value += Math.max(0, fromEnemyDistance - toEnemyDistance) * (defenders > 1 ? 780 : 360);
+      }
+      const leavingCastle = fromPoint && toPoint ? Math.hypot(toPoint.x - cell.x, toPoint.y - cell.y) > Math.hypot(fromPoint.x - cell.x, fromPoint.y - cell.y) : false;
+      if (leavingCastle && defenders > 1) value += 1450;
+    }
+  }
+
   return value;
 }
 
@@ -628,11 +976,15 @@ function moveAttackBonus(action, owner) {
   const adjacent = adjacentWallCounts(action.to, owner);
   let value = 0;
   if (Number.isFinite(fromEnemyDistance) && Number.isFinite(toEnemyDistance)) value += (fromEnemyDistance - toEnemyDistance) * (castleReserveGone() ? 460 : 35);
-  if (Number.isFinite(fromBuildSiteDistance) && Number.isFinite(toBuildSiteDistance) && !castleReserveGone()) value += (fromBuildSiteDistance - toBuildSiteDistance) * 520;
+  if (Number.isFinite(fromBuildSiteDistance) && Number.isFinite(toBuildSiteDistance) && !castleReserveGone()) value += (fromBuildSiteDistance - toBuildSiteDistance) * (thirdCastleUrgency(owner) ? 820 : 520);
   value += Math.max(0, homeProgress) * (castleReserveGone() ? 170 : 150);
   value += adjacent.vulnerableEnemy * (castleReserveGone() ? 1050 : 110);
   value += adjacent.enemy * (castleReserveGone() ? 300 : 35);
-  value += adjacent.own * 120;
+  value += blockedCompletionPrepBonus(action, owner);
+  value += actionMultiTargetBonus(action, owner);
+  value += quietCastleRedeployBonus(action, owner);
+  value += castleGuardScore(action.to, owner);
+  value += adjacent.own * (castleReserveGone() ? 70 : 45);
   return value;
 }
 
@@ -641,6 +993,7 @@ function buildExpansionBonus(edgeKeyValue, owner) {
   const home = capitalCell(owner);
   if (!home) return 0;
   const edge = edges.get(edgeKeyValue);
+  const urgency = thirdCastleUrgency(owner);
   let value = 0;
   let supportsCastlePlan = false;
 
@@ -654,9 +1007,9 @@ function buildExpansionBonus(edgeKeyValue, owner) {
     if (!state.castles[cellKeyValue] && hasCastleSpacing(cell)) {
       supportsCastlePlan = true;
       value += Math.min(distanceFromCapital, 4) * 210;
-      value += ownWalls * 260;
-      if (distanceFromCapital >= 2) value += 520;
-      if (distanceFromCapital >= 3) value += 260;
+      value += ownWalls * (urgency ? 760 : 260);
+      if (distanceFromCapital >= 2) value += urgency ? 1150 : 520;
+      if (distanceFromCapital >= 3) value += urgency ? 620 : 260;
     }
   }
 
@@ -667,14 +1020,19 @@ function actionAttackBonus(action, owner) {
   if (action.type === "buildWall") {
     let value = castleReserveGone() ? -760 : -90;
     const edge = edges.get(action.edge);
+    value += ownCastleWallPressure(action.edge, owner);
+    value += enemyCastleWallPressure(action.edge, owner);
+    value += blockedCompletionPrepBonus(action, owner);
+    value += actionMultiTargetBonus(action, owner);
     for (const cellKeyValue of edge?.cells || []) {
       const cell = cellByKey(cellKeyValue);
       const castle = state.castles[cellKeyValue];
       const ownWalls = wallCountForCell(cell, owner);
       if (castle?.owner === enemyOf(owner) && !castle.capital) {
-        if (ownWalls >= 4) value += castleReserveGone() ? 15000 : 2500;
-        else if (ownWalls === 3) value += castleReserveGone() ? 8500 : 1200;
-        else if (ownWalls === 2) value += castleReserveGone() ? 3600 : 460;
+        const afterOwnWalls = ownWalls + 1;
+        if (afterOwnWalls >= 4) value += castleReserveGone() ? 15000 : 2500;
+        else if (afterOwnWalls === 3) value += castleReserveGone() ? 8500 : 1200;
+        else if (afterOwnWalls === 2) value += castleReserveGone() ? 3600 : 460;
         else value += castleReserveGone() ? 1200 : 90;
       } else if (!castle && hasCastleSpacing(cell) && !castleReserveGone()) {
         if (ownWalls >= 4) value += 3600;
@@ -688,7 +1046,7 @@ function actionAttackBonus(action, owner) {
   }
 
   if (action.type === "destroyWall") {
-    let value = 900;
+    let value = 900 + blockedCompletionPrepBonus(action, owner);
     const edge = edges.get(action.edge);
     for (const cellKeyValue of edge?.cells || []) {
       const cell = cellByKey(cellKeyValue);
@@ -717,12 +1075,18 @@ function boardScoreFor(owner) {
   return (
     score(owner) * 1800 -
     score(enemy) * 1900 +
+    thirdCastleStatusScore(owner) -
+    thirdCastleStatusScore(enemy) * 0.8 +
     captureThreatScore(owner) * (castleReserveGone() ? 2.45 : 0.55) -
     captureThreatScore(enemy) * (castleReserveGone() ? 1.45 : 0.85) +
     castleThreatScore(owner) * (castleReserveGone() ? 0.08 : 1.65) -
     castleThreatScore(enemy) * 1.05 +
     knightDevelopmentScore(owner) -
     knightDevelopmentScore(enemy) * 0.65 +
+    enemyKnightConstraintScore(owner) -
+    enemyKnightConstraintScore(enemy) * 0.55 +
+    multiTargetAttackScore(owner) -
+    multiTargetAttackScore(enemy) * 0.72 +
     knightMobilityScore(owner) * 8 -
     knightMobilityScore(enemy) * 10 +
     wallPresenceScore(owner) * 2 -
@@ -736,8 +1100,9 @@ function immediateActionBonus(action, owner, beforeCastles, beforeEnemyCastles) 
   if (state.winner === owner) value += 100000;
   if (state.winner === enemyOf(owner)) value -= 100000;
   if (score(owner) > beforeCastles) value += 8500;
+  if (score(owner) >= 3 && beforeCastles < 3) value += 26000;
   if (score(enemyOf(owner)) < beforeEnemyCastles) value += 9000;
-  if (action.type === "buildCastle") value += 7200;
+  if (action.type === "buildCastle") value += thirdCastleUrgency(owner) ? 21000 : 7200;
   if (action.type === "destroyWall") value += 1050;
   if (action.type === "buildWall") value += 20;
   if (action.type === "move") value += 35;
@@ -780,7 +1145,7 @@ function bestImmediateReplyScore(owner, limit = 36) {
 function actionPriority(action) {
   if (action.type === "buildCastle") return 5;
   if (action.type === "destroyWall") return 4;
-  if (action.type === "buildWall") return castleReserveGone() ? 3 : 4;
+  if (action.type === "buildWall") return 4;
   if (action.type === "move") return castleReserveGone() ? 3 : 1;
   return 1;
 }
@@ -810,7 +1175,7 @@ function simulatedActionScore(action, owner) {
   let value = immediate;
   if (!state.winner) {
     const reply = bestImmediateReplyScore(enemyOf(owner));
-    value -= Math.max(0, reply) * 0.68;
+    value -= Math.max(0, reply) * (thirdCastleUrgency(owner) ? 0.42 : 0.68);
   }
 
   state = previousState;
@@ -825,8 +1190,16 @@ function buildPhaseActions(actions, owner) {
   if (castleReserveGone()) return actions;
   const castleActions = actions.filter((action) => action.type === "buildCastle");
   if (castleActions.length) return castleActions;
+  const attackingWallActions = actions.filter((action) => action.type === "buildWall" && enemyCastleWallPressure(action.edge, owner) > 0);
+  const multiFrontWallActions = actions.filter((action) => action.type === "buildWall" && actionMultiTargetBonus(action, owner) > 0);
+  const thirdCastleWallActions = actions.filter((action) => action.type === "buildWall" && ownCastleWallPressure(action.edge, owner) > 0);
+  if (castleAttackMode(owner) && attackingWallActions.length && !thirdCastleUrgency(owner)) return attackingWallActions;
   const usefulWallActions = actions.filter((action) => action.type === "buildWall" && buildExpansionBonus(action.edge, owner) > 0);
-  if (usefulWallActions.length) return usefulWallActions;
+  if (thirdCastleUrgency(owner) && thirdCastleWallActions.length) return thirdCastleWallActions;
+  if (thirdCastleUrgency(owner) && usefulWallActions.length) return usefulWallActions;
+  if (usefulWallActions.length) return usefulWallActions.concat(thirdCastleWallActions, multiFrontWallActions, attackingWallActions);
+  if (castleReserveGone() && multiFrontWallActions.length) return multiFrontWallActions.concat(attackingWallActions);
+  if (attackingWallActions.length) return attackingWallActions.concat(multiFrontWallActions);
   const moveActions = actions.filter((action) => action.type === "move");
   if (moveActions.length) return moveActions;
   return actions;
@@ -859,7 +1232,15 @@ function scheduleAiTurn() {
     }
     const action = chooseAiAction(aiGame.player);
     aiGame.thinking = false;
-    if (action && applyAction(action, { publish: false })) return;
+    if (action) {
+      const previous = cloneState(state);
+      if (applyAction(action, { publish: false })) {
+        const markers = inferRemoteMarkers(previous, state);
+        const fallback = markerForAction(action, aiGame.player);
+        (markers.length ? markers : [fallback]).filter(Boolean).forEach((marker) => addActionMarker(marker));
+        return;
+      }
+    }
     addLog(`${PLAYERS[aiGame.player].name} AI has no legal action.`);
     finishTurn({ publish: false });
   }, 450);
@@ -887,13 +1268,77 @@ function returnKnightHome(knight, fromVertex) {
 }
 
 function addCaptureMarker(owner, vertex, kind = "capture", delay = 0) {
-  captureMarkers.push({ owner, vertex, kind, startedAt: performance.now() + delay });
+  captureMarkers.push({ owner, target: "vertex", vertex, kind, startedAt: performance.now() + delay });
   if (!captureAnimationFrame) animateCaptureMarkers();
+}
+
+function addActionMarker(marker, delay = 0) {
+  captureMarkers.push({ ...marker, blocksInput: true, startedAt: performance.now() + delay });
+  selectedKnight = null;
+  pendingTouchEdge = null;
+  pendingTouchCell = null;
+  hover = null;
+  if (!captureAnimationFrame) animateCaptureMarkers();
+}
+
+function markerForAction(action, owner) {
+  if (action.type === "move") return { owner, target: "vertex", vertex: action.to, kind: "move" };
+  if (action.type === "buildWall") return { owner, target: "edge", edge: action.edge, kind: "buildWall" };
+  if (action.type === "destroyWall") return { owner, target: "edge", edge: action.edge, kind: "destroyWall" };
+  if (action.type === "buildCastle") return { owner, target: "cell", cell: action.cell, kind: "buildCastle" };
+  return null;
+}
+
+function inferRemoteMarkers(previous, next) {
+  const markers = [];
+  const actor = previous.turn;
+  const addMarker = (marker) => {
+    if (!marker) return;
+    const markerKey = marker.vertex || marker.edge || marker.cell || "";
+    const duplicate = markers.some((item) => (
+      item.owner === marker.owner
+      && item.kind === marker.kind
+      && item.target === marker.target
+      && (item.vertex || item.edge || item.cell || "") === markerKey
+    ));
+    if (!duplicate) markers.push(marker);
+  };
+
+  for (const knight of next.knights || []) {
+    const before = previous.knights?.find((item) => item.id === knight.id);
+    if (before && before.vertex !== knight.vertex && knight.owner === actor) {
+      addMarker({ owner: knight.owner, target: "vertex", vertex: knight.vertex, kind: "move" });
+    }
+  }
+
+  for (const [key, owner] of Object.entries(next.walls || {})) {
+    if (!previous.walls?.[key]) {
+      addMarker({ owner, target: "edge", edge: key, kind: "buildWall" });
+    }
+  }
+
+  for (const [key, owner] of Object.entries(previous.walls || {})) {
+    if (!next.walls?.[key]) {
+      addMarker({ owner, target: "edge", edge: key, kind: "destroyWall" });
+    }
+  }
+
+  for (const [key, castle] of Object.entries(next.castles || {})) {
+    const before = previous.castles?.[key];
+    if (!before && !castle.capital) {
+      addMarker({ owner: castle.owner, target: "cell", cell: key, kind: "buildCastle" });
+    }
+    if (before && before.owner !== castle.owner && !castle.capital) {
+      addMarker({ owner: castle.owner, target: "cell", cell: key, kind: "captureCastle" });
+    }
+  }
+
+  return markers;
 }
 
 function animateCaptureMarkers() {
   captureAnimationFrame = requestAnimationFrame(() => {
-    captureMarkers = captureMarkers.filter((marker) => performance.now() - marker.startedAt < 1200);
+    captureMarkers = captureMarkers.filter((marker) => performance.now() - marker.startedAt < ACTION_MARKER_DURATION);
     draw();
     if (captureMarkers.length) animateCaptureMarkers();
     else captureAnimationFrame = null;
@@ -1228,30 +1673,69 @@ function drawTargets() {
   }
 }
 
+function markerPalette(kind) {
+  const destructive = kind === "capture" || kind === "destroyWall" || kind === "captureCastle";
+  if (destructive) return { outer: "rgba(168, 75, 68, 0.95)", inner: "rgba(212, 154, 36, 0.92)", fill: "rgba(168, 75, 68, 0.14)" };
+  return { outer: "rgba(74, 132, 169, 0.95)", inner: "rgba(108, 141, 85, 0.94)", fill: "rgba(74, 132, 169, 0.14)" };
+}
+
+function drawPulseAtPoint(point, marker, progress, radius = clamp(renderedHexDiameter() * 0.16, 16, 26)) {
+  const palette = markerPalette(marker.kind);
+  const pulse = 1 + Math.sin(progress * Math.PI) * 0.22;
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius * pulse, 0, Math.PI * 2);
+  ctx.strokeStyle = palette.outer;
+  ctx.lineWidth = 6;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius * 0.58 * pulse, 0, Math.PI * 2);
+  ctx.strokeStyle = palette.inner;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.fillStyle = palette.fill;
+  ctx.fill();
+}
+
+function drawPulseOnEdge(edgeKeyValue, marker, progress) {
+  const edge = edges.get(edgeKeyValue);
+  if (!edge) return;
+  const a = toScreen(vertices.get(edge.a));
+  const b = toScreen(vertices.get(edge.b));
+  const palette = markerPalette(marker.kind);
+  const pulse = 1 + Math.sin(progress * Math.PI) * 0.22;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.strokeStyle = palette.outer;
+  ctx.lineWidth = clamp(renderedHexDiameter() * 0.11 * pulse, 8, 18);
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.strokeStyle = palette.inner;
+  ctx.lineWidth = clamp(renderedHexDiameter() * 0.055 * pulse, 4, 10);
+  ctx.lineCap = "round";
+  ctx.stroke();
+}
+
+function drawPulseOnCell(cellKeyValue, marker, progress) {
+  const cell = cellByKey(cellKeyValue);
+  if (!cell) return;
+  drawPulseAtPoint(toScreen(cell), marker, progress, clamp(renderedHexDiameter() * 0.25, 24, 42));
+}
+
 function drawCaptureMarkers() {
   const now = performance.now();
   for (const marker of captureMarkers) {
     const elapsed = now - marker.startedAt;
     if (elapsed < 0) continue;
-    const progress = Math.min(1, elapsed / 1200);
-    const point = toScreen(vertices.get(marker.vertex));
-    const pulse = 1 + Math.sin(progress * Math.PI) * 0.22;
+    const progress = Math.min(1, elapsed / ACTION_MARKER_DURATION);
     ctx.save();
     ctx.globalAlpha = 1 - progress * 0.72;
-    const outerColor = marker.kind === "respawn" ? "rgba(74, 132, 169, 0.95)" : "rgba(168, 75, 68, 0.95)";
-    const innerColor = marker.kind === "respawn" ? "rgba(108, 141, 85, 0.94)" : "rgba(212, 154, 36, 0.92)";
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, 34 * pulse, 0, Math.PI * 2);
-    ctx.strokeStyle = outerColor;
-    ctx.lineWidth = 6;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, 20 * pulse, 0, Math.PI * 2);
-    ctx.strokeStyle = innerColor;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.fillStyle = marker.kind === "respawn" ? "rgba(74, 132, 169, 0.18)" : marker.owner === "W" ? "rgba(255, 250, 240, 0.38)" : "rgba(32, 36, 42, 0.3)";
-    ctx.fill();
+    if (marker.target === "edge") drawPulseOnEdge(marker.edge, marker, progress);
+    else if (marker.target === "cell") drawPulseOnCell(marker.cell, marker, progress);
+    else drawPulseAtPoint(toScreen(vertices.get(marker.vertex)), marker, progress);
     ctx.restore();
   }
 }
@@ -1464,6 +1948,7 @@ async function connectOnlineSocket() {
   onlineGame.socket.on("connect_error", () => updateOnlineStatus("Online server unavailable."));
   onlineGame.socket.on("gameUpdated", ({ state: nextState }) => {
     suppressOnlinePublish = true;
+    const remoteMarkers = !onlineGame.player || state.turn !== onlineGame.player ? inferRemoteMarkers(state, nextState) : [];
     state = cloneState(nextState);
     selectedKnight = null;
     pendingTouchEdge = null;
@@ -1472,6 +1957,7 @@ async function connectOnlineSocket() {
     updateUi();
     if (state.winner && els.winModal) els.winModal.hidden = false;
     draw();
+    remoteMarkers.forEach((marker) => addActionMarker(marker));
     suppressOnlinePublish = false;
   });
   onlineGame.socket.on("roomClosed", () => {
