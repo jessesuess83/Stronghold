@@ -1324,11 +1324,13 @@ function knightDevelopmentScore(owner) {
     if (knight.owner !== owner) continue;
     const point = vertices.get(knight.vertex);
     const homeDistance = home ? Math.hypot(point.x - home.x, point.y - home.y) / HEX_SIZE : 0;
+    const homeLag = Math.max(0, 2.2 - homeDistance);
     const enemyCastleDistance = nearestCastleDistance(knight.vertex, enemyOf(owner));
     const ownCastleDistance = nearestCastleDistance(knight.vertex, owner);
     const adjacent = adjacentWallCounts(knight.vertex, owner);
 
-    value += Math.min(homeDistance, 4.5) * (castleReserveGone() ? 115 : 75);
+    value += Math.min(homeDistance, 4.5) * (castleReserveGone() ? 190 : 95);
+    if (homeLag > 0 && (castleReserveGone() || builtCastleCount() >= 4)) value -= homeLag * (castleReserveGone() ? 1450 : 650);
     const buildSiteDistance = nearestBuildSiteDistance(knight.vertex, owner);
     if (Number.isFinite(enemyCastleDistance)) value += Math.max(0, 7 - enemyCastleDistance) * (castleReserveGone() ? 145 : 10);
     if (Number.isFinite(buildSiteDistance) && !castleReserveGone()) value += Math.max(0, 7 - buildSiteDistance) * (thirdCastleUrgency(owner) ? 210 : 135);
@@ -1338,6 +1340,51 @@ function knightDevelopmentScore(owner) {
     value += adjacent.enemy * (castleReserveGone() ? 220 : 30);
     value += adjacent.own * (castleReserveGone() ? 35 : 35);
   }
+  return value;
+}
+
+function homeDistanceForVertex(vertexKeyValue, owner) {
+  const home = capitalCell(owner);
+  const point = vertices.get(vertexKeyValue);
+  if (!home || !point) return Infinity;
+  return Math.hypot(point.x - home.x, point.y - home.y) / HEX_SIZE;
+}
+
+function homeRedeployActionBonus(action, owner) {
+  if (action.type !== "move") return 0;
+  const knight = state.knights.find((item) => item.id === action.knightId && item.owner === owner);
+  if (!knight) return 0;
+  const fromHomeDistance = homeDistanceForVertex(knight.vertex, owner);
+  const toHomeDistance = homeDistanceForVertex(action.to, owner);
+  if (!Number.isFinite(fromHomeDistance) || !Number.isFinite(toHomeDistance)) return 0;
+
+  const reserveGone = castleReserveGone();
+  const lateBoard = reserveGone || builtCastleCount() >= 4;
+  const nearHome = fromHomeDistance <= 2.15;
+  const movingOut = toHomeDistance > fromHomeDistance + 0.25;
+  const movingBack = toHomeDistance + 0.15 < fromHomeDistance;
+  let value = 0;
+
+  if (nearHome && movingOut) {
+    const fromEnemyDistance = nearestCastleDistance(knight.vertex, enemyOf(owner));
+    const toEnemyDistance = nearestCastleDistance(action.to, enemyOf(owner));
+    const fromBuildSiteDistance = nearestBuildSiteDistance(knight.vertex, owner);
+    const toBuildSiteDistance = nearestBuildSiteDistance(action.to, owner);
+    const enemyProgress = Number.isFinite(fromEnemyDistance) && Number.isFinite(toEnemyDistance)
+      ? Math.max(0, fromEnemyDistance - toEnemyDistance)
+      : 0;
+    const buildProgress = Number.isFinite(fromBuildSiteDistance) && Number.isFinite(toBuildSiteDistance)
+      ? Math.max(0, fromBuildSiteDistance - toBuildSiteDistance)
+      : 0;
+    const tempo = reserveGone ? 1.35 : thirdCastleUrgency(owner) ? 1.15 : 1;
+
+    value += (2600 + Math.min(toHomeDistance - fromHomeDistance, 3) * 1100) * tempo;
+    value += enemyProgress * (reserveGone ? 1800 : 220);
+    value += buildProgress * (!reserveGone ? 1200 : 120);
+    if (toHomeDistance >= 2.8) value += reserveGone ? 2200 : 900;
+  }
+
+  if (lateBoard && nearHome && movingBack) value -= reserveGone ? 3600 : 1600;
   return value;
 }
 
@@ -1473,6 +1520,7 @@ function moveAttackBonus(action, owner) {
   value += focusedCastleAttackBonus(action, owner);
   value += counterPressureActionBonus(action, owner);
   value += actionMultiTargetBonus(action, owner);
+  value += homeRedeployActionBonus(action, owner);
   value -= moveSelfCaptureRiskPenalty(action, owner);
   value += quietCastleRedeployBonus(action, owner);
   value += castleGuardScore(action.to, owner);
@@ -1824,6 +1872,7 @@ function chooseAiAction(owner, options = {}) {
         integrity: Math.round(castleIntegrityActionBonus(candidate.action, owner)),
         focus: Math.round(focusedCastleAttackBonus(candidate.action, owner)),
         counter: Math.round(counterPressureActionBonus(candidate.action, owner)),
+        redeploy: Math.round(homeRedeployActionBonus(candidate.action, owner)),
         repeat: Math.round(moveOscillationPenalty(candidate.action, owner)),
         trapRisk: Math.round(moveSelfCaptureRiskPenalty(candidate.action, owner)),
       })),
