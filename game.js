@@ -2767,8 +2767,9 @@ function updateUi() {
   els.reset?.classList.toggle("active", !onlineGame.joined && !aiGame.enabled);
   els.ai?.classList.toggle("active", aiGame.enabled && !onlineGame.joined);
   if (els.copyAiLog) {
-    els.copyAiLog.hidden = !aiGame.enabled || onlineGame.joined;
-    els.copyAiLog.disabled = !aiReviewLog.length;
+    const canCopyAiGame = Boolean(state.winner && aiGame.enabled && !onlineGame.joined && aiReviewLog.length);
+    els.copyAiLog.hidden = !canCopyAiGame;
+    els.copyAiLog.disabled = !canCopyAiGame;
   }
   els.undoButtons.forEach((button) => {
     button.hidden = onlineGame.joined;

@@ -24,7 +24,6 @@
               <button id="howToBtn" class="secondary how-to-button" title="How to play">How to Play</button>
               <button id="resetBtn" class="secondary" title="Start local game">Local Game</button>
               <button id="aiBtn" class="secondary" title="Play against AI">Play AI</button>
-              <button id="copyAiLogBtn" class="secondary compact" title="Copy AI game log" hidden>Copy AI Log</button>
             </div>
           </div>
 
@@ -90,7 +89,10 @@
       <div class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="winTitle">
         <p class="eyebrow">Game Over</p>
         <h2 id="winTitle">White Wins</h2>
-        <button id="winResetBtn" class="secondary" title="Close winner message">OK</button>
+        <div class="confirm-actions">
+          <button id="winResetBtn" class="secondary" title="Close winner message">OK</button>
+          <button id="copyAiLogBtn" class="secondary" title="Copy AI game data" hidden>Copy Game Data</button>
+        </div>
       </div>
     </div>
 
@@ -185,6 +187,6 @@
       </div>
     </div>
 
-    <script src="game.js?v=20260731-ai24-no-shuffle"></script>
+    <script src="game.js?v=20260731-ai25-postgame-copy"></script>
   </body>
 </html>
