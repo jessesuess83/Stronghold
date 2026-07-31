@@ -86,6 +86,7 @@ let resizeFrame = null;
 let suppressOnlinePublish = false;
 let preferredOnlinePlayer = "W";
 let aiReviewLog = [];
+let winModalDismissed = false;
 let aiGame = {
   enabled: false,
   player: "B",
@@ -340,7 +341,7 @@ async function copyAiReviewLog() {
     console.log(text);
     addLog("AI game log printed to console.");
   }
-  if (els.winModal) els.winModal.hidden = true;
+  winModalDismissed = true;
   updateUi();
 }
 
@@ -2928,6 +2929,7 @@ function handleBoardPointerUp(event) {
 }
 
 function updateUi() {
+  if (!state.winner) winModalDismissed = false;
   els.turnTitle.textContent = state.winner ? `${PLAYERS[state.winner].name} Wins` : `${PLAYERS[state.turn].name} Turn`;
   els.turnChip.textContent = state.winner || state.turn;
   els.turnChip.classList.toggle("black-turn", (state.winner || state.turn) === "B");
@@ -2960,7 +2962,7 @@ function updateUi() {
   });
   els.winner.textContent = state.winner ? PLAYERS[state.winner].name : "-";
   els.winTitle.textContent = state.winner ? `${PLAYERS[state.winner].name} Wins` : "";
-  els.winModal.hidden = !state.winner;
+  els.winModal.hidden = !state.winner || winModalDismissed;
   els.log.innerHTML = state.log.map((item) => `<p>${item}</p>`).join("");
 }
 
@@ -2984,6 +2986,7 @@ function prepareFreshGameState() {
   pendingTouchCell = null;
   captureMarkers = [];
   aiReviewLog = [];
+  winModalDismissed = false;
   if (captureAnimationFrame) cancelAnimationFrame(captureAnimationFrame);
   captureAnimationFrame = null;
 }
@@ -3074,7 +3077,8 @@ els.confirmReset.addEventListener("click", () => {
   resetGame();
 });
 els.winReset.addEventListener("click", () => {
-  els.winModal.hidden = true;
+  winModalDismissed = true;
+  updateUi();
 });
 els.howTo.addEventListener("click", () => {
   els.howToModal.hidden = false;
