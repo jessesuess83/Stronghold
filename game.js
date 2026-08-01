@@ -38,7 +38,6 @@ const els = {
   whiteWalls: document.getElementById("whiteWalls"),
   blackWalls: document.getElementById("blackWalls"),
   castleReserve: document.getElementById("castleReserve"),
-  castleTokens: document.querySelectorAll("[data-castle-token]"),
   winner: document.getElementById("winner"),
   whiteHud: document.getElementById("whiteHud"),
   blackHud: document.getElementById("blackHud"),
@@ -2216,7 +2215,7 @@ function resizeCanvas() {
   const minX = Math.min(...xs) - HEX_SIZE * 0.95;
   const maxX = Math.max(...xs) + HEX_SIZE * 0.95;
   const minY = Math.min(...ys) - HEX_SIZE * 1.28;
-  const maxY = Math.max(...ys) + HEX_SIZE * 1.28;
+  const maxY = Math.max(...ys) + HEX_SIZE * 1.04;
   const cssW = rect.width;
   const cssH = rect.height;
   layout.width = cssW;
@@ -2954,12 +2953,6 @@ function updateUi() {
   els.whiteWalls.textContent = state.reserves.W;
   els.blackWalls.textContent = state.reserves.B;
   els.castleReserve.textContent = state.reserves.castles;
-  const spentCastleCount = CASTLE_TILE_RESERVE - state.reserves.castles;
-  els.castleTokens.forEach((token, index) => {
-    const spent = index < spentCastleCount;
-    token.hidden = spent;
-    token.parentElement.hidden = spent;
-  });
   els.winner.textContent = state.winner ? PLAYERS[state.winner].name : "-";
   els.winTitle.textContent = state.winner ? `${PLAYERS[state.winner].name} Wins` : "";
   els.winModal.hidden = !state.winner || winModalDismissed;

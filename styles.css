@@ -104,7 +104,6 @@ button {
 
 .board-brand,
 .creator-panel,
-.castle-reserve,
 .player-control {
   position: absolute;
   z-index: 4;
@@ -256,49 +255,33 @@ button {
   text-shadow: 0 1px 0 rgba(255, 250, 240, 0.72);
 }
 
+.reserve-count {
+  width: fit-content;
+  margin: 2px 0 0;
+  padding: 3px 7px;
+  border: 1px solid rgba(32, 36, 42, 0.14);
+  border-radius: 4px;
+  background: rgba(255, 250, 240, 0.72);
+  color: rgba(32, 36, 42, 0.78);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(0.72rem, 0.9vw, 0.9rem);
+  font-weight: 850;
+  line-height: 1.1;
+  text-align: left;
+  text-transform: none;
+}
+
+.reserve-count strong {
+  margin-left: 4px;
+  color: var(--ink);
+  font-size: 1.12em;
+}
+
 .player-control {
   bottom: clamp(8px, 1.4vw, 16px);
   display: flex;
   align-items: end;
   gap: clamp(6px, 1vw, 10px);
-}
-
-.castle-reserve {
-  top: 50%;
-  display: grid;
-  gap: clamp(4px, 0.7vw, 8px);
-  transform: translateY(-50%);
-}
-
-.white-castle-reserve {
-  left: clamp(8px, 1.4vw, 16px);
-}
-
-.black-castle-reserve {
-  right: clamp(8px, 1.4vw, 16px);
-}
-
-.castle-token {
-  display: grid;
-  width: clamp(46px, 7.8vw, 90px);
-  height: clamp(42px, 6.95vw, 80px);
-  place-items: center;
-  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
-  background: rgba(255, 250, 240, 0.78);
-  box-shadow: 0 8px 18px rgba(32, 36, 42, 0.12);
-}
-
-.castle-token img {
-  display: block;
-  width: clamp(43px, 7.2vw, 83px);
-  height: clamp(43px, 7.2vw, 83px);
-  object-fit: cover;
-  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
-}
-
-.castle-token[hidden],
-.castle-token img[hidden] {
-  display: none;
 }
 
 .player-hud {
@@ -555,9 +538,6 @@ button {
     font-size: clamp(1.75rem, 9vw, 2.55rem);
   }
 
-  .castle-reserve {
-    top: 48%;
-  }
 
   .player-control {
     max-width: 42vw;
@@ -617,15 +597,6 @@ button {
     font-size: 0.9rem;
   }
 
-  .castle-token {
-    width: clamp(40px, 6.5vw, 64px);
-    height: clamp(36px, 5.8vw, 57px);
-  }
-
-  .castle-token img {
-    width: clamp(38px, 6vw, 59px);
-    height: clamp(38px, 6vw, 59px);
-  }
 }
 
 @media (display-mode: standalone) {

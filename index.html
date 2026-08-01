@@ -10,7 +10,7 @@
     <title>Stronghold</title>
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260729-ai2" />
+    <link rel="stylesheet" href="styles.css?v=20260801-reserve-text" />
   </head>
   <body>
     <main class="app">
@@ -25,6 +25,7 @@
               <button id="resetBtn" class="secondary" title="Start local game">Local Game</button>
               <button id="aiBtn" class="secondary" title="Play against AI">Play AI</button>
             </div>
+            <p class="reserve-count">Castles Remaining: <strong id="castleReserve">6</strong></p>
           </div>
 
           <div class="creator-panel" aria-label="Creator and online game controls">
@@ -40,21 +41,8 @@
           <span class="sr-only" id="turnTitle">White Turn</span>
           <span class="sr-only" id="turnChip">W</span>
           <span class="sr-only" id="winner">-</span>
-          <span class="sr-only" id="castleReserve">6</span>
           <span class="sr-only" id="whiteWalls">40</span>
           <span class="sr-only" id="blackWalls">40</span>
-
-          <div class="castle-reserve white-castle-reserve" aria-label="White castle reserve">
-            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="W" /></span>
-            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="W" /></span>
-            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="W" /></span>
-          </div>
-
-          <div class="castle-reserve black-castle-reserve" aria-label="Black castle reserve">
-            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="B" /></span>
-            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="B" /></span>
-            <span class="castle-token"><img src="assets/castle-neutral.png" alt="" data-castle-token="B" /></span>
-          </div>
 
           <div class="player-control white-control">
             <div class="player-hud white-hud" id="whiteHud" aria-label="White player data">
@@ -166,6 +154,7 @@
         <p><strong>Knights protect adjacent Walls. Protected Walls cannot be destroyed.</strong></p>
 
         <h4>Build a Castle</h4>
+        <p>Only <strong>6 Castles</strong> can be placed on the board.</p>
         <p>Place a Castle on an empty hex if:</p>
         <ul>
           <li>its six sides include <strong>4 Walls</strong> of your color.</li>
@@ -187,6 +176,6 @@
       </div>
     </div>
 
-    <script src="game.js?v=20260731-ai29-modal-close"></script>
+    <script src="game.js?v=20260801-reserve-text"></script>
   </body>
 </html>
