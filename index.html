@@ -10,7 +10,7 @@
     <title>Stronghold</title>
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="assets/apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=20260801-reserve-text" />
+    <link rel="stylesheet" href="styles.css?v=20260801-hit-overlay" />
   </head>
   <body>
     <main class="app">
@@ -18,24 +18,24 @@
         <div class="game-shell" aria-label="Stronghold board">
           <canvas id="board" width="980" height="820"></canvas>
 
-          <div class="board-brand" aria-label="Game title and help">
-            <h1 class="game-title">Stronghold</h1>
-            <div class="title-actions">
-              <button id="howToBtn" class="secondary how-to-button" title="How to play">How to Play</button>
-              <button id="resetBtn" class="secondary" title="Start local game">Local Game</button>
-              <button id="aiBtn" class="secondary" title="Play against AI">Play AI</button>
+          <div class="top-ui">
+            <div class="board-brand" aria-label="Game title and help">
+              <h1 class="game-title">Stronghold</h1>
+              <div class="title-actions">
+                <button id="howToBtn" class="secondary how-to-button" title="How to play">How to Play</button>
+                <button id="resetBtn" class="secondary" title="Start local game">Local</button>
+                <button id="aiBtn" class="secondary" title="Play against AI">AI</button>
+                <button id="onlineBtn" class="secondary" title="Create online game">Online</button>
+                <button id="copyLinkBtn" class="secondary compact" title="Copy invite link" hidden>Copy Link</button>
+              </div>
             </div>
-            <p class="reserve-count">Castles Remaining: <strong id="castleReserve">6</strong></p>
-          </div>
 
-          <div class="creator-panel" aria-label="Creator and online game controls">
-            <p class="game-credit">A game by Ceaseless Wonders</p>
-            <div class="online-actions">
-              <button id="copyLinkBtn" class="secondary compact" title="Copy invite link" hidden>Copy Link</button>
-              <button id="onlineBtn" class="secondary" title="Create online game">Online Game</button>
+            <div class="creator-panel" aria-label="Creator and online game status">
+              <p class="game-credit">A game by Ceaseless Wonders</p>
+              <p class="reserve-count">Castles Remaining: <strong id="castleReserve">6</strong></p>
+              <p class="online-role" id="onlineRole" hidden>You are White</p>
+              <p class="online-status" id="onlineStatus" hidden>Online game ready.</p>
             </div>
-            <p class="online-role" id="onlineRole" hidden>You are White</p>
-            <p class="online-status" id="onlineStatus" hidden>Online game ready.</p>
           </div>
 
           <span class="sr-only" id="turnTitle">White Turn</span>
@@ -176,6 +176,6 @@
       </div>
     </div>
 
-    <script src="game.js?v=20260801-reserve-text"></script>
+    <script src="game.js?v=20260801-hit-overlay"></script>
   </body>
 </html>

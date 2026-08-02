@@ -102,11 +102,28 @@ button {
   text-transform: uppercase;
 }
 
+.top-ui,
 .board-brand,
 .creator-panel,
 .player-control {
   position: absolute;
   z-index: 4;
+}
+
+.top-ui,
+.board-brand,
+.creator-panel {
+  pointer-events: none;
+}
+
+.top-ui {
+  inset: 0;
+}
+
+.title-actions,
+.title-actions button,
+.creator-panel button,
+.player-control {
   pointer-events: auto;
 }
 
@@ -122,7 +139,7 @@ button {
   top: clamp(8px, 1.4vw, 16px);
   left: clamp(8px, 1.4vw, 16px);
   display: grid;
-  gap: clamp(7px, 1vw, 10px);
+  gap: clamp(6px, 0.85vw, 9px);
 }
 
 .game-title {
@@ -141,17 +158,56 @@ button {
 
 .title-actions {
   display: flex;
-  align-items: center;
-  gap: clamp(6px, 1vw, 10px);
+  width: fit-content;
+  align-items: stretch;
+  flex-direction: column;
+  gap: clamp(3px, 0.58vw, 6px);
 }
 
-
-.online-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
+.title-actions .secondary {
+  justify-content: flex-start;
+  width: 100%;
 }
+
+@media (max-width: 760px), (max-height: 620px) {
+  .top-ui {
+    top: clamp(8px, 1.4vw, 16px);
+    right: clamp(8px, 1.4vw, 16px);
+    left: clamp(8px, 1.4vw, 16px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(5px, 1vw, 8px);
+  }
+
+  .board-brand,
+  .creator-panel {
+    position: static;
+    max-width: 100%;
+  }
+
+  .creator-panel {
+    align-self: flex-end;
+    justify-items: end;
+    gap: 4px;
+  }
+
+  .game-credit {
+    text-align: right;
+  }
+
+  .title-actions {
+    width: auto;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .title-actions .secondary {
+    width: auto;
+  }
+}
+
 
 .online-color-choice {
   display: flex;
@@ -226,9 +282,9 @@ button {
 }
 
 .compact {
-  min-height: 34px;
-  padding: 0 12px;
-  font-size: 0.82rem;
+  min-height: 25px;
+  padding: 0 9px;
+  font-size: 0.62rem;
 }
 
 .secondary.active {
@@ -257,7 +313,8 @@ button {
 
 .reserve-count {
   width: fit-content;
-  margin: 2px 0 0;
+  margin: 0;
+  justify-self: end;
   padding: 3px 7px;
   border: 1px solid rgba(32, 36, 42, 0.14);
   border-radius: 4px;
@@ -267,7 +324,7 @@ button {
   font-size: clamp(0.72rem, 0.9vw, 0.9rem);
   font-weight: 850;
   line-height: 1.1;
-  text-align: left;
+  text-align: right;
   text-transform: none;
 }
 
@@ -350,12 +407,13 @@ button {
 }
 
 .secondary {
-  min-height: clamp(34px, 3.3vw, 38px);
-  padding: 0 clamp(10px, 1.1vw, 13px);
+  min-height: clamp(25px, 2.35vw, 27px);
+  padding: 0 clamp(7px, 0.8vw, 10px);
   border: 1px solid rgba(32, 36, 42, 0.2);
-  border-radius: 8px;
+  border-radius: 6px;
   background: rgba(255, 253, 247, 0.84);
   color: var(--ink);
+  font-size: 0.72em;
   font-weight: 800;
   cursor: pointer;
   transition:
@@ -498,9 +556,6 @@ button {
     min-height: 620px;
   }
 
-  .title-actions {
-    flex-wrap: wrap;
-  }
 
   .creator-panel {
     gap: 6px;
@@ -521,7 +576,7 @@ button {
   }
 
   .secondary {
-    font-size: 0.86rem;
+    font-size: 0.69rem;
   }
 }
 
@@ -592,9 +647,9 @@ button {
   }
 
   .secondary {
-    min-height: 34px;
-    padding: 0 11px;
-    font-size: 0.9rem;
+    min-height: 27px;
+    padding: 0 9px;
+    font-size: 0.72rem;
   }
 
 }
