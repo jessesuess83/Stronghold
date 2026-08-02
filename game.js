@@ -120,6 +120,15 @@ function renderedHexDiameter() {
   return HEX_SIZE * layout.scale * 2;
 }
 
+function compactVisualScale() {
+  const narrowestSide = Math.min(layout.width || 900, layout.height || 900);
+  return clamp(narrowestSide / 620, 0.64, 1);
+}
+
+function responsiveClamp(value, min, max) {
+  return clamp(value, min * compactVisualScale(), max * compactVisualScale());
+}
+
 function axialToPixel(q, r) {
   return {
     x: HEX_SIZE * Math.sqrt(3) * (q + r / 2),
@@ -939,13 +948,54 @@ function moveSelfCaptureRiskPenalty(action, owner) {
   knight.vertex = fromVertex;
 
   let value = 0;
-  if (moves === 0) value += 12000;
-  else if (moves === 1) value += 3900;
-  else if (moves === 2) value += 1250;
-  value += adjacent.enemy * (moves <= 2 ? 620 : 130);
-  value += nearbyEnemies * (moves <= 2 ? 520 : 90);
-  if (moves <= 4 || adjacent.enemy || nearbyEnemies) value += knightTrapWarningAt(action.to, owner, knight.id) * 0.48;
+  if (moves === 0) value += 60000;
+  else if (moves === 1) value += 22000;
+  else if (moves === 2) value += 7200;
+  else if (moves === 3 && (adjacent.enemy || nearbyEnemies)) value += 2200;
+  value += adjacent.enemy * (moves <= 2 ? 2400 : 420);
+  value += nearbyEnemies * (moves <= 2 ? 1900 : 260);
+  if (moves <= 4 || adjacent.enemy || nearbyEnemies) value += knightTrapWarningAt(action.to, owner, knight.id) * 1.25;
   return value;
+}
+
+function nextTurnKnightCapturePenalty(action, owner) {
+  if (action.type !== "move") return 0;
+  const movedKnight = state.knights.find((knight) => knight.id === action.knightId && knight.owner === owner);
+  if (!movedKnight || movedKnight.vertex !== action.to) return 0;
+  const enemy = enemyOf(owner);
+  const originalState = cloneState(state);
+  const originalSelected = selectedKnight;
+  const originalHover = hover;
+  const originalPendingEdge = pendingTouchEdge;
+  const originalPendingCell = pendingTouchCell;
+  const startingMoves = legalMoveTargets(movedKnight).size;
+  const nearbyEnemies = enemyKnightNearVertex(action.to, owner, 1.8);
+  let penalty = 0;
+
+  for (const reply of legalActionsForPlayer(enemy)) {
+    state = cloneState(originalState);
+    selectedKnight = null;
+    hover = null;
+    pendingTouchEdge = null;
+    pendingTouchCell = null;
+    if (!mutateAction(reply, enemy, { log: false })) continue;
+    finishTurn({ render: false, publish: false, animate: false, log: false });
+    const after = state.knights.find((knight) => knight.id === action.knightId && knight.owner === owner);
+    if (after && after.vertex !== action.to) {
+      penalty = Math.max(penalty, 90000);
+      break;
+    }
+  }
+
+  state = originalState;
+  selectedKnight = originalSelected;
+  hover = originalHover;
+  pendingTouchEdge = originalPendingEdge;
+  pendingTouchCell = originalPendingCell;
+
+  if (!penalty && startingMoves <= 1 && nearbyEnemies) penalty += 42000;
+  else if (!penalty && startingMoves <= 2 && nearbyEnemies >= 2) penalty += 22000;
+  return penalty;
 }
 
 function enemyCastlePressureProfile(owner) {
@@ -1666,6 +1716,108 @@ function buildExpansionBonus(edgeKeyValue, owner) {
   return supportsCastlePlan ? value + wallCohesion * 0.9 : wallCohesion - 520;
 }
 
+function defenderEscapePlanBonus(action, owner) {
+  const targets = enemyCastleDefenderTargets(owner).filter((target) => target.ownWalls >= (castleReserveGone() ? 1 : 2));
+  if (!targets.length) return 0;
+  const before = targets.map((target) => ({
+    ...target,
+    beforeMoves: legalMoveTargets(target.defender).size,
+  }));
+  const previousState = cloneState(state);
+  const previousSelected = selectedKnight;
+  const previousHover = hover;
+  const previousPendingEdge = pendingTouchEdge;
+  const previousPendingCell = pendingTouchCell;
+  let value = 0;
+
+  selectedKnight = null;
+  hover = null;
+  pendingTouchEdge = null;
+  pendingTouchCell = null;
+  if (mutateAction(action, owner, { log: false })) {
+    for (const target of before) {
+      const defender = state.knights.find((knight) => knight.id === target.defender.id);
+      if (!defender) continue;
+      const afterMoves = legalMoveTargets(defender).size;
+      const reduction = Math.max(0, target.beforeMoves - afterMoves);
+      const pressure = target.ownWalls >= 3 ? 1.65 : target.ownWalls >= 2 ? 1.25 : 0.85;
+      const edge = action.edge ? edges.get(action.edge) : null;
+      const touchesTarget = edge?.cells?.includes(target.key);
+      const touchesDefender = edge && (edge.a === defender.vertex || edge.b === defender.vertex);
+
+      if (reduction > 0) value += reduction * (target.ownWalls >= 3 ? 6200 : 3600) * pressure;
+      if (afterMoves === 0) value += 36000 * pressure;
+      else if (afterMoves === 1) value += 14000 * pressure;
+      else if (afterMoves === 2 && target.ownWalls >= 2) value += 5200 * pressure;
+
+      if ((action.type === "buildWall" || action.type === "destroyWall") && touchesTarget) {
+        value += (target.ownWalls >= 3 ? 4600 : 2200) * pressure;
+        if (touchesDefender) value += 9800 * pressure;
+      }
+      if (action.type === "move" && action.to) {
+        const toDefenderDistance = vertexDistance(action.to, defender.vertex);
+        if (target.cell.vertices.includes(action.to)) value += (target.ownWalls >= 3 ? 4200 : 1800) * pressure;
+        if (toDefenderDistance <= 1.05) value += (afterMoves <= 2 ? 7200 : 2600) * pressure;
+      }
+    }
+  }
+
+  state = previousState;
+  selectedKnight = previousSelected;
+  hover = previousHover;
+  pendingTouchEdge = previousPendingEdge;
+  pendingTouchCell = previousPendingCell;
+  return value;
+}
+
+function defensiveDefenderPlanBonus(action, owner) {
+  const threats = threatenedFriendlyCastles(owner).filter((threat) => threat.enemyWalls >= 2 || threat.adjacentEnemyKnights >= 2 || threat.enemyLegalCompletions > 0);
+  if (!threats.length) return 0;
+  const previousState = cloneState(state);
+  const previousSelected = selectedKnight;
+  const previousHover = hover;
+  const previousPendingEdge = pendingTouchEdge;
+  const previousPendingCell = pendingTouchCell;
+  let value = 0;
+
+  selectedKnight = null;
+  hover = null;
+  pendingTouchEdge = null;
+  pendingTouchCell = null;
+  if (mutateAction(action, owner, { log: false })) {
+    for (const threat of threats) {
+      const cell = cellByKey(threat.key);
+      if (!cell) continue;
+      const defenders = state.knights.filter((knight) => knight.owner === owner && cell.vertices.includes(knight.vertex));
+      const attackers = state.knights.filter((knight) => knight.owner === enemyOf(owner) && cell.vertices.includes(knight.vertex));
+      const ownerWalls = wallCountForCell(cell, owner);
+      const enemyWalls = wallCountForCell(cell, enemyOf(owner));
+      const edge = action.edge ? edges.get(action.edge) : null;
+      const touchesThreat = edge?.cells?.includes(threat.key);
+      const urgency = threat.urgency + Math.max(0, enemyWalls - ownerWalls) * 1.4;
+
+      if (defenders.length) {
+        const bestMoves = Math.max(...defenders.map((defender) => legalMoveTargets(defender).size));
+        if (bestMoves <= 1) value -= 5200 * urgency;
+        else if (bestMoves >= 3) value += 1800 * urgency;
+      }
+      if (attackers.length && (action.type === "buildWall" || action.type === "destroyWall") && touchesThreat) {
+        value += attackers.length * 2200 * urgency;
+      }
+      if (action.type === "move" && action.to && cell.vertices.includes(action.to)) {
+        value += 2200 * urgency;
+      }
+    }
+  }
+
+  state = previousState;
+  selectedKnight = previousSelected;
+  hover = previousHover;
+  pendingTouchEdge = previousPendingEdge;
+  pendingTouchCell = previousPendingCell;
+  return value;
+}
+
 function castleDefenderActionBonus(action, owner) {
   const targets = enemyCastleDefenderTargets(owner).filter((target) => target.ownWalls >= (castleReserveGone() ? 1 : 2));
   if (!targets.length) return 0;
@@ -1926,6 +2078,7 @@ function actionPriority(action) {
 }
 
 function simulatedActionScore(action, owner) {
+  const tacticalPlan = defenderEscapePlanBonus(action, owner) + defensiveDefenderPlanBonus(action, owner);
   const previousState = state;
   const previousSelected = selectedKnight;
   const previousHover = hover;
@@ -1947,7 +2100,7 @@ function simulatedActionScore(action, owner) {
     return -Infinity;
   }
 
-  let value = immediate;
+  let value = immediate + tacticalPlan - nextTurnKnightCapturePenalty(action, owner);
   if (!state.winner) {
     const reply = bestImmediateReplyScore(enemyOf(owner));
     value -= Math.max(0, reply) * (thirdCastleUrgency(owner) ? 0.42 : 0.68);
@@ -2100,9 +2253,10 @@ function chooseAiAction(owner, options = {}) {
         counter: Math.round(counterPressureActionBonus(candidate.action, owner)),
         redeploy: Math.round(homeRedeployActionBonus(candidate.action, owner)),
         decisiveWall: Math.round(decisiveCastleWallBonus(candidate.action, owner)),
-        defender: Math.round(castleDefenderActionBonus(candidate.action, owner)),
+        defender: Math.round(castleDefenderActionBonus(candidate.action, owner) + defenderEscapePlanBonus(candidate.action, owner)),
+        shield: Math.round(defensiveDefenderPlanBonus(candidate.action, owner)),
         repeat: Math.round(moveOscillationPenalty(candidate.action, owner)),
-        trapRisk: Math.round(moveSelfCaptureRiskPenalty(candidate.action, owner)),
+        trapRisk: Math.round(moveSelfCaptureRiskPenalty(candidate.action, owner) + nextTurnKnightCapturePenalty(candidate.action, owner)),
       })),
     };
   }
@@ -2332,8 +2486,8 @@ function resizeCanvas() {
     return;
   }
   const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(640, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(520, Math.floor(rect.height * dpr));
+  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
@@ -2352,7 +2506,7 @@ function resizeCanvas() {
   const brand = overlayRect(document.querySelector(".board-brand"), shell);
   const actions = overlayRect(document.querySelector(".title-actions"), shell);
   const creator = overlayRect(document.querySelector(".creator-panel"), shell);
-  const inset = Math.max(8, Math.min(cssW, cssH) * 0.018);
+  const inset = Math.max(5, Math.min(cssW, cssH) * 0.014);
   const verticalActions = Boolean(actions && actions.height > actions.width * 0.9);
   const stackedHeader = Boolean(brand && creator && creator.top > brand.top && creator.bottom > brand.bottom);
   const headerBottom = stackedHeader ? Math.max(brand.bottom, creator.bottom) : brand?.bottom || 0;
@@ -2506,8 +2660,8 @@ function drawCastle(cell, castle) {
   if (!assetsReady) return;
   const center = toScreen(cell);
   const hexDiameter = renderedHexDiameter();
-  const borderSize = castle.capital ? Math.max(41, hexDiameter * 0.663) : clamp(hexDiameter * 0.576, 43, 75);
-  const size = castle.capital ? Math.max(32, hexDiameter * 0.527) : clamp(hexDiameter * 0.544, 40, 72);
+  const borderSize = castle.capital ? responsiveClamp(hexDiameter * 0.663, 34, 72) : responsiveClamp(hexDiameter * 0.576, 34, 75);
+  const size = castle.capital ? responsiveClamp(hexDiameter * 0.527, 27, 58) : responsiveClamp(hexDiameter * 0.544, 31, 72);
   const castleImage = castle.capital
     ? assetImages[castle.owner === "W" ? "capitalDark" : "capitalLight"]
     : assetImages[castle.owner === "W" ? "castleB" : "castleW"];
@@ -2558,8 +2712,8 @@ function drawKnight(knight) {
   const point = toScreen(vertices.get(knight.vertex));
   const selected = selectedKnight === knight.id;
   const hexDiameter = renderedHexDiameter();
-  const backingSize = clamp(hexDiameter * (selected ? 0.282 : 0.249), 23, 36);
-  const iconSize = clamp(hexDiameter * (selected ? 0.292 : 0.256), 23, 37);
+  const backingSize = responsiveClamp(hexDiameter * (selected ? 0.282 : 0.249), 18, 36);
+  const iconSize = responsiveClamp(hexDiameter * (selected ? 0.292 : 0.256), 19, 37);
   const selectionRadius = backingSize * 0.55;
   const knightImage = assetImages[knight.owner === "W" ? "knightB" : "knightW"];
   if (knightImage?.complete && knightImage.naturalWidth > 0) {
@@ -2699,7 +2853,7 @@ function draw() {
 
   if (hover?.kind === "cell" && canBuildCastle(hover.key, currentPlayer())) {
     const center = toScreen(cellByKey(hover.key));
-    const castleTargetRadius = clamp(renderedHexDiameter() * (pendingTouchCell?.key === hover.key ? 0.34 : 0.3), 22, 38);
+    const castleTargetRadius = responsiveClamp(renderedHexDiameter() * (pendingTouchCell?.key === hover.key ? 0.34 : 0.3), 17, 38);
     ctx.beginPath();
     ctx.arc(center.x, center.y, castleTargetRadius, 0, Math.PI * 2);
     ctx.strokeStyle = pendingTouchCell?.key === hover.key ? "rgba(212, 154, 36, 0.92)" : "rgba(108, 141, 85, 0.9)";

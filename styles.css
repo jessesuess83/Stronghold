@@ -553,7 +553,7 @@ button {
 
 @media (max-width: 720px) {
   .game-shell {
-    min-height: 620px;
+    min-height: calc(100svh - 8px);
   }
 
 
@@ -576,13 +576,20 @@ button {
   }
 
   .secondary {
-    font-size: 0.69rem;
+    min-height: 24px;
+    padding: 0 7px;
+    font-size: 0.66rem;
   }
 }
 
 @media (max-width: 480px) {
+  .app {
+    padding: 3px;
+  }
+
+  .board-zone,
   .game-shell {
-    min-height: 640px;
+    min-height: calc(100svh - 6px);
   }
 
   .board-brand {
@@ -590,7 +597,7 @@ button {
   }
 
   .game-title {
-    font-size: clamp(1.75rem, 9vw, 2.55rem);
+    font-size: clamp(1.6rem, 8vw, 2.35rem);
   }
 
 
@@ -600,6 +607,7 @@ button {
 
   .player-hud {
     width: 100%;
+    padding: 7px 8px;
   }
 
   .hud-stats span {
