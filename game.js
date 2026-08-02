@@ -12,6 +12,7 @@ const TOUCH_CONFIRM_EDGE_HIT_RADIUS = 16;
 const CASTLE_HIT_RADIUS = 30;
 const TOUCH_CASTLE_HIT_RADIUS = 42;
 const TOUCH_CONFIRM_CASTLE_HIT_RADIUS = 50;
+const EDGE_ENDPOINT_DEADZONE = 0.18;
 const CASTLE_TILE_RESERVE = 6;
 const WIN_CASTLE_COUNT = 4;
 const ACTION_MARKER_DURATION = 520;
@@ -2891,7 +2892,8 @@ function nearestOwnKnight(point, owner) {
       bestDist = dist;
     }
   }
-  return best && bestDist < KNIGHT_HIT_RADIUS / layout.scale ? best.vertex : null;
+  const radius = KNIGHT_HIT_RADIUS * clamp(compactVisualScale(), 0.76, 1);
+  return best && bestDist < radius / layout.scale ? best.vertex : null;
 }
 
 function nearestEdgeCandidate(point) {
@@ -2906,11 +2908,11 @@ function nearestEdgeCandidate(point) {
     const y = a.y + (b.y - a.y) * t;
     const dist = Math.hypot(point.x - x, point.y - y);
     if (dist < bestDist) {
-      best = edge;
+      best = { ...edge, t };
       bestDist = dist;
     }
   }
-  return { key: best?.key || null, dist: bestDist };
+  return { key: best?.key || null, dist: bestDist, t: best?.t ?? 0.5 };
 }
 
 function nearestEdge(point) {
@@ -2947,6 +2949,13 @@ function hitTest(event, options = {}) {
   const point = eventPoint(event);
   const edgeRadius = options.edgeRadius ?? EDGE_HIT_RADIUS;
   const castleRadius = options.castleRadius ?? CASTLE_HIT_RADIUS;
+  const edge = nearestEdgeCandidate(point);
+  const edgeAwayFromPieces = edge.t > EDGE_ENDPOINT_DEADZONE && edge.t < 1 - EDGE_ENDPOINT_DEADZONE;
+  if (!selectedKnight && edge.key && edgeAwayFromPieces && edge.dist < edgeRadius / layout.scale) {
+    const isBreakable = state.walls[edge.key] && canDestroyWall(edge.key, currentPlayer());
+    const isBuildable = !state.walls[edge.key] && canBuildWall(edge.key, currentPlayer());
+    if (isBreakable || isBuildable) return { kind: "edge", key: edge.key };
+  }
   const ownKnight = nearestOwnKnight(point, currentPlayer());
   if (ownKnight) return { kind: "vertex", key: ownKnight };
   if (selectedKnight) {
@@ -2963,12 +2972,6 @@ function hitTest(event, options = {}) {
     canBuildCastle(castleCell.key, currentPlayer())
   ) {
     return { kind: "cell", key: castleCell.key };
-  }
-  const edge = nearestEdgeCandidate(point);
-  if (edge.key && edge.dist < edgeRadius / layout.scale) {
-    const isBreakable = state.walls[edge.key] && canDestroyWall(edge.key, currentPlayer());
-    const isBuildable = !state.walls[edge.key] && canBuildWall(edge.key, currentPlayer());
-    if (isBreakable || isBuildable) return { kind: "edge", key: edge.key };
   }
   const vertex = nearestVertex(point);
   if (vertex) return { kind: "vertex", key: vertex };
